@@ -1,1 +1,50 @@
-<main><h1>sendit</h1></main>
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import type { Bridge } from './lib/bridge';
+  import EmptyState from './lib/EmptyState.svelte';
+  import Sidebar from './lib/Sidebar.svelte';
+  import { nearby, seenBefore } from './lib/state';
+  import { createStore } from './lib/store.svelte';
+
+  let { bridge }: { bridge: Bridge } = $props();
+  // The bridge is fixed for the app's lifetime; read it once.
+  // svelte-ignore state_referenced_locally
+  const store = createStore(bridge);
+  onMount(() => store.start());
+
+  const near = $derived(nearby(store.state));
+</script>
+
+<div class="shell">
+  <Sidebar
+    me={store.me}
+    nearby={near}
+    seenBefore={seenBefore(store.state)}
+    selected={store.selected}
+    searching={store.searching}
+    onselect={store.select}
+    onrefresh={store.refresh}
+  />
+  <main>
+    {#if store.error}
+      <div class="error" role="alert">
+        <span>{store.error}</span>
+        <button onclick={store.dismissError}>Dismiss</button>
+      </div>
+    {/if}
+    <EmptyState
+      hasDevices={near.length > 0}
+      searching={store.searching}
+      onrefresh={store.refresh}
+      onscan={store.scan}
+      onaddpeer={store.addPeer}
+    />
+  </main>
+</div>
+
+<style>
+  .shell { display: grid; grid-template-columns: 240px 1fr; height: 100%; }
+  main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .error { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 12px 20px 0; padding: 10px 14px; border-radius: 12px; background: var(--danger-bg); border: 1px solid #e5533d66; font-size: 13.5px; }
+  .error button { background: none; border: 0; color: var(--danger-text); }
+</style>
