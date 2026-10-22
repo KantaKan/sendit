@@ -33,7 +33,7 @@ sendit/
 └─ app/           Tauri 2. src-tauri depends on core; frontend is Svelte + TypeScript
 ```
 
-`core` exposes an async API (`Node::start(config)`, `node.send(device_id, paths)`, `node.respond(request_id, accept, dest_dir)`, `node.cancel(transfer_id)`) and an event stream (`DeviceFound`, `DeviceLost`, `IncomingRequest`, `Progress`, `TransferDone`, `TransferFailed`, `IdentityChanged`). The GUI and the CLI are both thin consumers of that API and stream.
+`core` exposes an async API (`Node::start(config)`, `node.send(fingerprint, paths, pin)`, `node.respond(request_id, decision)`, `node.cancel(transfer_id)`) and an event stream (`DeviceUpdated`, `IdentityChanged`, `IncomingRequest`, `TransferStarted`, `Progress`, `TransferDone`, `TransferFailed`). There is no "device lost" event, because LocalSend peers don't re-announce periodically. "Nearby" means the device was seen this session. The GUI and the CLI are both thin consumers of that API and stream.
 
 Transport: HTTP over TLS over TCP. LocalSend compatibility requires this. Discovery runs over UDP multicast.
 
@@ -47,6 +47,9 @@ Reference: https://github.com/localsend/protocol
 - Status codes are handled exactly as the spec defines them: 204, 400, 401 (PIN), 403 (rejected), 409 (busy), 422 (checksum), 429, 500.
 - `deviceType` is `desktop`. `version` is whatever the protocol README pins at implementation time, currently 2.x.
 - The download API (`prepare-download`/`download`) is out of v1 scope. It becomes the base for the QR web share feature.
+- LocalSend devices with encryption turned off (`protocol: "http"`) are ignored in v1, because there is no cert to pin.
+- Verifying an incoming sender: before a request is shown, sendit calls the sender's `/register`, pinned to the fingerprint the sender claimed. If that succeeds, the request is marked verified. Otherwise it is shown as "unverified".
+- sendit does not send `sha256` for outgoing files, because hashing large files first would delay the start. When a peer does send `sha256`, sendit checks it on receipt.
 
 ## Security
 
@@ -56,7 +59,7 @@ Reference: https://github.com/localsend/protocol
 | MITM on the TLS connection | The fingerprint of the presented cert must equal the fingerprint that was announced or registered. On mismatch the connection is aborted. A custom rustls `ServerCertVerifier` replaces CA validation. |
 | First contact cannot be verified by TOFU | Between sendit peers, both screens show the same avatar pair, derived from both fingerprints, and the user compares them (flow B). LocalSend peers skip this step and are labelled "unverified". |
 | Unsolicited files | Every incoming request needs an explicit Accept, unless the sender is a verified device marked auto-accept. A PIN can be turned on. |
-| Path traversal / hostile filenames | Paths are reduced to their final component. `..`, absolute paths, reserved Windows names and control characters are rejected or replaced. The final path must canonicalize to a location inside the chosen destination directory. |
+| Path traversal / hostile filenames | Each `/`- or `\`-separated component is cleaned separately, so folder sends keep their structure. `.`, `..`, empty and absolute-path components are dropped. Reserved Windows names, `<>:"|?*`, control characters and bidi-override characters are escaped or replaced. The final path must canonicalize to a location inside the chosen destination directory. |
 | Disk exhaustion | Total size is checked against free space before Accept is offered. Uploads that send more bytes than they declared are aborted. |
 
 Device avatar: a DiceBear `thumbs` avatar rendered offline with `@dicebear/core` + `@dicebear/collection`. The seed is a hex prefix of the fingerprint, so if a device's key changes, its avatar visibly changes too.
@@ -85,6 +88,7 @@ States the UI must have: empty (no devices yet: explain that devices on the same
 - **Interrupted transfer**: the ticket moves to `failed` and shows the reason (peer gone, declined, checksum, disk). Retry resends the whole file, because the protocol has no resume.
 - **Receiving**: data is written to `<name>.part` and renamed on completion. Any failure or cancel deletes the `.part` file.
 - **Name collisions**: an existing file is never overwritten. A suffix is added: `name (1).ext`.
+- **Stalled transfer**: both sides fail the transfer if no bytes move for 30 s. This also frees the receiver's single session slot when a sender disappears right after `prepare-upload`.
 - **Network change** (IP or interface changes): the multicast socket is rebuilt and a new announce goes out. Known devices stay in the "seen before" list.
 - **Port 53317 already in use** (for example, LocalSend is also running): the UI says so clearly. Falling back to another port still works for sending, because peers learn the port from the announce.
 - **Errors do not panic or crash the app**: `core` errors are typed with `thiserror` and mapped to UI copy in one place.
