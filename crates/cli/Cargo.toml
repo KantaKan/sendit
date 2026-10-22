@@ -1,0 +1,19 @@
+[package]
+name = "sendit-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "sendit"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+directories = "5"
+gethostname = "0.5"
+sendit-core = { path = "../core" }
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3"
