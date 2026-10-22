@@ -1,0 +1,62 @@
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { open } from '@tauri-apps/plugin-dialog';
+import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import type { Bridge, DragState } from './bridge';
+import type { AppInfo, CoreEvent, Device, KnownDevice } from './types';
+
+/** Tauri's listeners are async to attach; give the UI a sync unsubscribe. */
+function subscribe<T>(attach: (cb: T) => Promise<() => void>, cb: T): () => void {
+  let off: (() => void) | undefined;
+  let dead = false;
+  void attach(cb).then((u) => (dead ? u() : (off = u)));
+  return () => {
+    dead = true;
+    off?.();
+  };
+}
+
+export const tauriBridge: Bridge = {
+  info: () => invoke<AppInfo>('info'),
+  devices: () => invoke<Device[]>('devices'),
+  knownDevices: () => invoke<KnownDevice[]>('known_devices'),
+  sendFiles: (fingerprint, paths) => invoke('send_files', { fingerprint, paths }),
+  respond: (requestId, accept, dest) => invoke('respond', { requestId, accept, dest: dest ?? null }),
+  cancel: (transferId) => invoke<boolean>('cancel', { transferId }),
+  announce: () => invoke('announce'),
+  scan: () => invoke<Device[]>('scan'),
+  addPeer: (addr) => invoke<Device>('add_peer', { addr }),
+  trustNewKey: (fingerprint) => invoke('trust_new_key', { fingerprint }),
+  block: (fingerprint) => invoke('block', { fingerprint }),
+  setVerified: (fingerprint, verified) => invoke('set_verified', { fingerprint, verified }),
+  pickFiles: async () => {
+    const r = await open({ multiple: true, directory: false });
+    return r === null ? [] : Array.isArray(r) ? r : [r];
+  },
+  pickFolder: async () => {
+    const r = await open({ multiple: false, directory: true });
+    return typeof r === 'string' ? r : null;
+  },
+  reveal: (path) => revealItemInDir(path),
+  notify: (title, body) => {
+    void (async () => {
+      let ok = await isPermissionGranted();
+      if (!ok) ok = (await requestPermission()) === 'granted';
+      if (ok) sendNotification({ title, body });
+    })();
+  },
+  onEvent: (cb) => subscribe((f: typeof cb) => listen<CoreEvent>('core-event', (e) => f(e.payload)), cb),
+  onDrag: (cb) =>
+    subscribe(
+      (f: (d: DragState) => void) =>
+        getCurrentWebview().onDragDropEvent((e) => {
+          const p = e.payload;
+          if (p.type === 'enter') f({ kind: 'enter' });
+          else if (p.type === 'leave') f({ kind: 'leave' });
+          else if (p.type === 'drop') f({ kind: 'drop', paths: p.paths });
+        }),
+      cb,
+    ),
+};
