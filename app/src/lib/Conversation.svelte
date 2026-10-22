@@ -1,9 +1,11 @@
 <script lang="ts">
   import Avatar from './Avatar.svelte';
+  import IdentityPanel from './IdentityPanel.svelte';
   import { lastTwo } from './format';
   import type { Ticket } from './state';
   import type { Store } from './store.svelte';
   import TicketView from './Ticket.svelte';
+  import VerifyPanel from './VerifyPanel.svelte';
   import type { AppInfo, Device } from './types';
 
   let {
@@ -13,6 +15,7 @@
   const destLabel = $derived(me ? lastTwo(me.downloadDir) : 'Downloads');
   const sub = $derived([device.addr.split(':')[0], device.deviceModel].filter(Boolean).join('  '));
   let list: HTMLElement | undefined = $state();
+  let skipped = $state(new Set<string>());
 
   $effect(() => {
     void tickets.length;
@@ -29,7 +32,22 @@
       <p class="mono">{sub}</p>
     </div>
   </header>
-  <!-- Task 8 inserts the verification panels here -->
+  {#if device.trust === 'suspect'}
+    <IdentityPanel
+      alias={device.alias}
+      {oldFingerprint}
+      newFingerprint={device.fingerprint}
+      onblock={() => store.block(device.fingerprint)}
+      ontrust={() => store.trustNewKey(device.fingerprint)}
+    />
+  {:else if device.isSendit && device.trust === 'known' && me && !skipped.has(device.fingerprint)}
+    <VerifyPanel
+      theirs={device.fingerprint}
+      mine={me.fingerprint}
+      onyes={() => store.verify(device.fingerprint)}
+      onskip={() => (skipped = new Set(skipped).add(device.fingerprint))}
+    />
+  {/if}
   <div class="list" bind:this={list}>
     {#each tickets as t (t.key)}
       <TicketView
