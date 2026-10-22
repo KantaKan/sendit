@@ -12,7 +12,11 @@ async fn forged_register_cannot_rename_or_move_a_known_device() {
     let mut forged = fake_info();
     forged.fingerprint = bob.node.fingerprint().to_string();
     forged.alias = "x".into();
-    let c = PeerClient::new(Some(a.node.fingerprint())).unwrap();
+    let c = PeerClient::new(
+        &sendit_core::identity::Identity::generate().unwrap(),
+        Some(a.node.fingerprint()),
+    )
+    .unwrap();
     c.http
         .post(format!("https://{}{API}/register", a.addr()))
         .json(&forged)
@@ -32,7 +36,11 @@ async fn forged_register_cannot_rename_or_move_a_known_device() {
 #[tokio::test(flavor = "multi_thread")]
 async fn unverifiable_register_is_not_stored() {
     let a = peer("alice").await;
-    let c = PeerClient::new(Some(a.node.fingerprint())).unwrap();
+    let c = PeerClient::new(
+        &sendit_core::identity::Identity::generate().unwrap(),
+        Some(a.node.fingerprint()),
+    )
+    .unwrap();
     c.http
         .post(format!("https://{}{API}/register", a.addr()))
         .json(&fake_info())
@@ -105,7 +113,11 @@ async fn second_request_while_one_is_pending_is_409() {
         let fp = b.node.fingerprint().to_string();
         let addr = b.addr();
         tokio::spawn(async move {
-            let c = PeerClient::new(Some(&fp)).unwrap();
+            let c = PeerClient::new(
+                &sendit_core::identity::Identity::generate().unwrap(),
+                Some(&fp),
+            )
+            .unwrap();
             let req = PrepareUploadRequest {
                 info: fake_info(),
                 files: [("1".to_string(), meta("1", "a.txt", 1, None))].into(),
@@ -143,7 +155,11 @@ async fn pin_guessing_gets_429() {
 #[tokio::test(flavor = "multi_thread")]
 async fn info_endpoint_returns_our_identity() {
     let b = peer("bob").await;
-    let c = PeerClient::new(Some(b.node.fingerprint())).unwrap();
+    let c = PeerClient::new(
+        &sendit_core::identity::Identity::generate().unwrap(),
+        Some(b.node.fingerprint()),
+    )
+    .unwrap();
     let info: DeviceInfo = c
         .http
         .get(format!("https://{}{API}/info", b.addr()))

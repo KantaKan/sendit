@@ -21,7 +21,7 @@ pub(crate) async fn register_with(
     addr: SocketAddr,
     expected: Option<&str>,
 ) -> Result<Device> {
-    let client = PeerClient::new(expected)?;
+    let client = PeerClient::new(&n.identity, expected)?;
     let resp = client
         .http
         .post(format!("https://{addr}{API}/register"))

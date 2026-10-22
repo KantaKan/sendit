@@ -89,7 +89,11 @@ pub fn meta(id: &str, name: &str, size: u64, sha256: Option<String>) -> FileMeta
 }
 
 pub async fn prepare(to: &Peer, files: Vec<FileMeta>, pin: Option<&str>) -> reqwest::Response {
-    let c = PeerClient::new(Some(to.node.fingerprint())).unwrap();
+    let c = PeerClient::new(
+        &sendit_core::identity::Identity::generate().unwrap(),
+        Some(to.node.fingerprint()),
+    )
+    .unwrap();
     let req = PrepareUploadRequest {
         info: fake_info(),
         files: files.into_iter().map(|f| (f.id.clone(), f)).collect(),
@@ -105,7 +109,11 @@ pub async fn prepare(to: &Peer, files: Vec<FileMeta>, pin: Option<&str>) -> reqw
 }
 
 pub async fn upload(to: &Peer, session: &str, file_id: &str, token: &str, body: Vec<u8>) -> u16 {
-    let c = PeerClient::new(Some(to.node.fingerprint())).unwrap();
+    let c = PeerClient::new(
+        &sendit_core::identity::Identity::generate().unwrap(),
+        Some(to.node.fingerprint()),
+    )
+    .unwrap();
     c.http
         .post(format!("https://{}{API}/upload", to.addr()))
         .query(&[

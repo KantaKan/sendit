@@ -49,6 +49,8 @@ Reference: https://github.com/localsend/protocol
 - The download API (`prepare-download`/`download`) is out of v1 scope. It becomes the base for the QR web share feature.
 - LocalSend devices with encryption turned off (`protocol: "http"`) are ignored in v1, because there is no cert to pin.
 - Verifying an incoming sender: before a request is shown, sendit calls the sender's `/register`, pinned to the fingerprint the sender claimed. If that succeeds, the request is marked verified. Otherwise it is shown as "unverified".
+- Mutual TLS: LocalSend 2.2+ servers require a client certificate and hang up without one. sendit always presents its identity cert as the client cert, so the peer can pin us the same way we pin it.
+- Text messages: LocalSend sends a message as one `text/*` file whose content is in `preview`, and expects 204 ("no transfer needed"). sendit shows these as messages and writes nothing to disk.
 - sendit does not send `sha256` for outgoing files, because hashing large files first would delay the start. When a peer does send `sha256`, sendit checks it on receipt.
 
 ## Security

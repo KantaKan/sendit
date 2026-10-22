@@ -94,13 +94,15 @@ impl ServerCertVerifier for PinnedVerifier {
 
 /// An HTTPS client for exactly one peer. With `expected = None` it accepts
 /// any cert, so the caller must compare `seen_fingerprint()` to what the peer claims.
+/// It always presents `identity` as a client certificate: LocalSend 2.2+
+/// servers require one (mutual TLS) and hang up otherwise.
 pub struct PeerClient {
     pub http: reqwest::Client,
     seen: Arc<Mutex<Option<String>>>,
 }
 
 impl PeerClient {
-    pub fn new(expected: Option<&str>) -> Result<Self> {
+    pub fn new(identity: &Identity, expected: Option<&str>) -> Result<Self> {
         let seen = Arc::new(Mutex::new(None));
         let verifier = PinnedVerifier {
             expected: expected.map(str::to_string),
@@ -111,7 +113,10 @@ impl PeerClient {
             .with_safe_default_protocol_versions()?
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(verifier))
-            .with_no_client_auth();
+            .with_client_auth_cert(
+                vec![CertificateDer::from(identity.cert_der.clone())],
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(identity.key_der.clone())),
+            )?;
         let http = reqwest::Client::builder()
             .use_preconfigured_tls(tls)
             .no_proxy()
@@ -146,7 +151,7 @@ mod tests {
         let id = Identity::generate().unwrap();
         let addr = serve(&id).await;
         for fp in [id.fingerprint.clone(), id.fingerprint.to_lowercase()] {
-            let c = PeerClient::new(Some(&fp)).unwrap();
+            let c = PeerClient::new(&Identity::generate().unwrap(), Some(&fp)).unwrap();
             let body = c
                 .http
                 .get(format!("https://{addr}/"))
@@ -165,7 +170,7 @@ mod tests {
         let id = Identity::generate().unwrap();
         let other = Identity::generate().unwrap();
         let addr = serve(&id).await;
-        let c = PeerClient::new(Some(&other.fingerprint)).unwrap();
+        let c = PeerClient::new(&Identity::generate().unwrap(), Some(&other.fingerprint)).unwrap();
         assert!(c.http.get(format!("https://{addr}/")).send().await.is_err());
         assert_eq!(
             c.seen_fingerprint().as_deref(),
@@ -177,11 +182,106 @@ mod tests {
     async fn unpinned_client_accepts_and_records() {
         let id = Identity::generate().unwrap();
         let addr = serve(&id).await;
-        let c = PeerClient::new(None).unwrap();
+        let c = PeerClient::new(&Identity::generate().unwrap(), None).unwrap();
         c.http.get(format!("https://{addr}/")).send().await.unwrap();
         assert_eq!(
             c.seen_fingerprint().as_deref(),
             Some(id.fingerprint.as_str())
+        );
+    }
+
+    /// LocalSend 2.2 servers demand a client certificate (mutual TLS) and
+    /// drop the connection without one.
+    #[derive(Debug)]
+    struct RequireAnyClientCert {
+        seen: Arc<Mutex<Option<String>>>,
+    }
+
+    impl rustls::server::danger::ClientCertVerifier for RequireAnyClientCert {
+        fn client_auth_mandatory(&self) -> bool {
+            true
+        }
+        fn root_hint_subjects(&self) -> &[rustls::DistinguishedName] {
+            &[]
+        }
+        fn verify_client_cert(
+            &self,
+            end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _now: UnixTime,
+        ) -> std::result::Result<rustls::server::danger::ClientCertVerified, rustls::Error>
+        {
+            *self.seen.lock().unwrap() = Some(fingerprint_of(end_entity.as_ref()));
+            Ok(rustls::server::danger::ClientCertVerified::assertion())
+        }
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls12_signature(
+                message,
+                cert,
+                dss,
+                &provider().signature_verification_algorithms,
+            )
+        }
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls13_signature(
+                message,
+                cert,
+                dss,
+                &provider().signature_verification_algorithms,
+            )
+        }
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            provider()
+                .signature_verification_algorithms
+                .supported_schemes()
+        }
+    }
+
+    #[tokio::test]
+    async fn presents_our_certificate_when_the_peer_demands_one() {
+        let server_id = Identity::generate().unwrap();
+        let me = Identity::generate().unwrap();
+        let seen = Arc::new(Mutex::new(None));
+        let cfg = rustls::ServerConfig::builder_with_provider(provider())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_client_cert_verifier(Arc::new(RequireAnyClientCert { seen: seen.clone() }))
+            .with_single_cert(
+                vec![CertificateDer::from(server_id.cert_der.clone())],
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(server_id.key_der.clone())),
+            )
+            .unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = axum::Router::new().route("/", axum::routing::get(|| async { "ok" }));
+        let tls = axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(cfg));
+        tokio::spawn(axum_server::from_tcp_rustls(listener, tls).serve(app.into_make_service()));
+
+        let c = PeerClient::new(&me, Some(&server_id.fingerprint)).unwrap();
+        let body = c
+            .http
+            .get(format!("https://{addr}/"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(body, "ok");
+        assert_eq!(
+            seen.lock().unwrap().as_deref(),
+            Some(me.fingerprint.as_str())
         );
     }
 }

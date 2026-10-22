@@ -212,7 +212,11 @@ async fn cancel_endpoint_fails_the_session() {
     auto_accept(&b.node);
     let mut rx = b.node.subscribe();
     let r = accepted(&b, vec![meta("1", "a.txt", 1, None)]).await;
-    let c = PeerClient::new(Some(b.node.fingerprint())).unwrap();
+    let c = PeerClient::new(
+        &sendit_core::identity::Identity::generate().unwrap(),
+        Some(b.node.fingerprint()),
+    )
+    .unwrap();
     let s = c
         .http
         .post(format!("https://{}{API}/cancel", b.addr()))
@@ -235,7 +239,11 @@ async fn cancel_endpoint_fails_the_session() {
 async fn abandoned_request_expires_and_frees_the_slot() {
     let b = peer("bob").await; // nobody answers; request_timeout = 5s
     let mut rx = b.node.subscribe();
-    let c = PeerClient::new(Some(b.node.fingerprint())).unwrap();
+    let c = PeerClient::new(
+        &sendit_core::identity::Identity::generate().unwrap(),
+        Some(b.node.fingerprint()),
+    )
+    .unwrap();
     let req = PrepareUploadRequest {
         info: fake_info(),
         files: [("1".to_string(), meta("1", "a.txt", 1, None))].into(),

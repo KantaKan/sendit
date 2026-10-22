@@ -85,7 +85,7 @@ async fn run(
     meter: &Arc<Meter>,
     cancel: &CancellationToken,
 ) -> std::result::Result<(), FailReason> {
-    let client = PeerClient::new(Some(&device.fingerprint))
+    let client = PeerClient::new(&n.identity, Some(&device.fingerprint))
         .map_err(|e| FailReason::Protocol(e.to_string()))?;
     let base = device.base_url();
     let request = PrepareUploadRequest {
