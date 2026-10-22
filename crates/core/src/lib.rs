@@ -9,6 +9,7 @@ pub mod trust;
 mod discovery;
 mod node;
 mod receive;
+mod send;
 mod server;
 
 pub use error::{Error, Result};

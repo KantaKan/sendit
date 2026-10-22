@@ -1,11 +1,11 @@
 use crate::{
     discovery,
     error::{Error, Result},
-    events::{Device, Event},
+    events::{Device, Event, FailReason},
     identity::Identity,
     protocol::*,
     receive::{has_space, Pending, Session},
-    server, tls,
+    send, server, tls,
     trust::{Observation, TrustStore},
 };
 use axum_server::tls_rustls::RustlsConfig;
@@ -17,6 +17,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::broadcast;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -65,6 +66,7 @@ pub(crate) struct Inner {
     pub pending: Mutex<HashMap<String, Pending>>,
     /// LocalSend allows one incoming session at a time; others get 409.
     pub session: Mutex<Option<Session>>,
+    pub outgoing: Mutex<HashMap<String, CancellationToken>>,
 }
 
 #[derive(Clone, Debug)]
@@ -165,6 +167,7 @@ impl Node {
             events,
             pending: Mutex::new(HashMap::new()),
             session: Mutex::new(None),
+            outgoing: Mutex::new(HashMap::new()),
         });
         let tls = RustlsConfig::from_config(tls::server_config(&inner.identity)?);
         let app = server::router(inner.clone()).into_make_service_with_connect_info::<SocketAddr>();
@@ -277,6 +280,26 @@ impl Node {
         }
         let _ = p.tx.send(decision);
         Ok(())
+    }
+
+    /// Runs the whole transfer. Emits TransferStarted first, so a UI can grab
+    /// the id for `cancel`. Returns that id on success.
+    pub async fn send(
+        &self,
+        fingerprint: &str,
+        paths: Vec<PathBuf>,
+        pin: Option<String>,
+    ) -> Result<String> {
+        send::send(&self.inner, fingerprint, paths, pin).await
+    }
+
+    /// Cancels an outgoing or incoming transfer. Returns false if it was unknown.
+    pub fn cancel(&self, transfer_id: &str) -> bool {
+        if let Some(token) = self.inner.outgoing.lock().unwrap().get(transfer_id) {
+            token.cancel();
+            return true;
+        }
+        self.inner.fail_incoming(transfer_id, FailReason::Cancelled)
     }
 
     pub fn shutdown(&self) {
