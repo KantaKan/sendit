@@ -75,8 +75,10 @@ Visual direction "Ticket v3" (mockups in `.superpowers/brainstorm/`, not committ
 
 Layout: the sidebar lists devices, split into "nearby" and "seen before". The main pane is a conversation with the selected device, where every transfer is a ticket (notched stub on the right). Incoming tickets sit left-aligned and are neutral. Outgoing tickets sit right-aligned and are green. A live ticket fills with the accent color as it progresses. There is no separate progress bar track.
 
+Received files are only revealed in the file manager ("Show in folder"), never opened from the app, so one click can't run a file a peer sent.
+
 Flows:
-- **Send**: drop files anywhere in a conversation, or press Ctrl/Cmd+V. The transfer starts at once and appears as a live ticket.
+- **Send**: drop files anywhere in a conversation, or use the "Choose files" button. The transfer starts at once and appears as a live ticket. Pasting files with Ctrl/Cmd+V is deferred: the webview only receives file contents, not paths.
 - **A. Incoming**: a dashed "wants to send N files" ticket shows up in that device's conversation with Accept / Decline and a destination link. An OS notification fires if the window is not focused. There is no full-screen takeover.
 - **B. First sendit contact**: an avatar-pair comparison with "Yes, trust" / "Skip".
 - **C. Identity changed**: a red inline panel that shows the old and new fingerprint prefixes, with "Block" / "It's a reinstall, trust new key".
