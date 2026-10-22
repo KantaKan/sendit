@@ -62,6 +62,7 @@ export type CoreEvent =
   | { type: 'identityChanged'; alias: string; oldFingerprint: string; device: Device }
   | { type: 'incomingRequest'; request: IncomingRequest }
   | { type: 'requestExpired'; requestId: string }
+  | { type: 'messageReceived'; from: Device; text: string; senderVerified: boolean }
   | {
       type: 'transferStarted';
       transferId: string;

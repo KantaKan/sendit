@@ -280,3 +280,67 @@ async fn accepted_transfer_names_its_request() {
     };
     assert_eq!(request_id, Some(request.request_id));
 }
+
+fn text_meta(text: Option<&str>) -> FileMeta {
+    let mut m = meta("1", "note.txt", 5, None);
+    m.file_type = "text/plain".into();
+    m.preview = text.map(str::to_string);
+    m
+}
+
+/// LocalSend sends a text message as one text file whose content is in
+/// `preview`, and expects 204 ("no transfer needed") instead of an upload.
+#[tokio::test(flavor = "multi_thread")]
+async fn text_message_is_delivered_without_upload() {
+    let b = peer("bob").await;
+    let mut rx = b.node.subscribe();
+    assert_eq!(
+        prepare(
+            &b,
+            vec![text_meta(Some(
+                "hello
+world"
+            ))],
+            None
+        )
+        .await
+        .status(),
+        204
+    );
+    let Event::MessageReceived {
+        from,
+        text,
+        sender_verified,
+    } = wait_for(&mut rx, |e| matches!(e, Event::MessageReceived { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(
+        text,
+        "hello
+world"
+    );
+    assert_eq!(from.alias, "mallory");
+    assert!(!sender_verified);
+    assert_eq!(std::fs::read_dir(b.down()).unwrap().count(), 0);
+}
+
+/// A real .txt file (no preview) is still a file transfer.
+#[tokio::test(flavor = "multi_thread")]
+async fn text_file_without_preview_is_still_a_file() {
+    let b = peer("bob").await;
+    auto_accept(&b.node);
+    assert_eq!(prepare(&b, vec![text_meta(None)], None).await.status(), 200);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blocked_sender_cannot_message() {
+    let b = peer("bob").await;
+    b.node.block(&"F".repeat(64));
+    assert_eq!(
+        prepare(&b, vec![text_meta(Some("hi"))], None)
+            .await
+            .status(),
+        403
+    );
+}

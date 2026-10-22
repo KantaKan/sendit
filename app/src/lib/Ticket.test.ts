@@ -66,3 +66,15 @@ test('failed outgoing ticket explains and retries', async () => {
   await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
   expect(h.onretry).toHaveBeenCalled();
 });
+
+test('message shows the text, not a file, and copies it', async () => {
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const t: T = { ...base, status: 'message', text: 'line one\nline two', files: [], total: 0, senderVerified: true };
+  render(Ticket, { props: { ticket: t, destLabel: 'd', ...handlers() } });
+  expect(screen.getByText(/line one/)).toBeInTheDocument();
+  expect(screen.queryByText('Show in folder')).not.toBeInTheDocument();
+  await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+  expect(writeText).toHaveBeenCalledWith('line one\nline two');
+  expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+});

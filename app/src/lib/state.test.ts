@@ -131,3 +131,13 @@ describe('selectors', () => {
     expect(nearby(s).map((d) => d.alias)).toEqual(['Amy', 'zed']);
   });
 });
+
+describe('messages', () => {
+  test('a text message becomes a message ticket and adds an unknown sender', () => {
+    const s = apply(initial(), { type: 'messageReceived', from: PIXEL, text: 'hi there', senderVerified: false }, 7);
+    expect(s.devices[PIXEL.fingerprint]).toEqual(PIXEL);
+    expect(ticketsFor(s, PIXEL.fingerprint)[0]).toMatchObject({
+      status: 'message', text: 'hi there', direction: 'incoming', senderVerified: false, at: 7,
+    });
+  });
+});

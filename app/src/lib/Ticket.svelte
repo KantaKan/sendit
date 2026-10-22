@@ -17,6 +17,12 @@
   } = $props();
 
   const out = $derived(ticket.direction === 'outgoing');
+  let copied = $state(false);
+  async function copy() {
+    await navigator.clipboard.writeText(ticket.text ?? '');
+    copied = true;
+    setTimeout(() => (copied = false), 1500);
+  }
   const count = $derived(ticket.files.length);
   const title = $derived(count === 1 ? ticket.files[0].fileName : `${count} files`);
   const pct = $derived(percent(ticket.bytes, ticket.total));
@@ -53,6 +59,14 @@
       <button class="dest mono" onclick={onelsewhere} disabled={ticket.status === 'accepting'} title="Save to another folder">to {destLabel}</button>
     </div>
   </article>
+{:else if ticket.status === 'message'}
+  <div class="row">
+    <article class="message" aria-label="Message">
+      <p class="text">{ticket.text}</p>
+      <p class="mono meta">{clock(ticket.at)}{ticket.senderVerified ? '' : '  unverified sender'}</p>
+    </article>
+    <div class="under"><button class="link" onclick={copy}>{copied ? 'Copied' : 'Copy'}</button></div>
+  </div>
 {:else}
   <div class="row" class:out>
     <article
@@ -119,6 +133,9 @@
   .stub { position: relative; border-left: 1.5px dashed #ffffff22; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
   .ticket.out .stub { border-color: #0d1f1633; }
   .ticket.live .stub { color: var(--accent); border-color: #3ecf8e44; }
+  .message { max-width: min(420px, 100%); background: var(--surface-2); border-radius: 14px 14px 14px 4px; padding: 10px 14px; }
+  .message .text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; user-select: text; }
+  .message .meta { margin: 6px 0 0; }
   .reason { margin: 0; font-size: 12px; color: var(--danger-text); }
   .under { display: flex; gap: 12px; }
   .link { background: none; border: 0; padding: 0; font-size: 12px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }

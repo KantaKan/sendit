@@ -63,6 +63,20 @@ impl Drop for ExpireOnDrop {
     }
 }
 
+/// LocalSend sends a text message as a single text file whose content is in
+/// `preview`, and expects 204 ("no transfer needed") instead of an upload.
+fn text_message(req: &PrepareUploadRequest) -> Option<String> {
+    let mut files = req.files.values();
+    let (Some(f), None) = (files.next(), files.next()) else {
+        return None;
+    };
+    if f.file_type.starts_with("text") {
+        f.preview.clone()
+    } else {
+        None
+    }
+}
+
 fn busy(n: &Inner) -> bool {
     n.session.lock().unwrap().is_some() || !n.pending.lock().unwrap().is_empty()
 }
@@ -98,11 +112,14 @@ async fn prepare_upload(
     {
         return StatusCode::BAD_REQUEST.into_response();
     }
-    if busy(&n) {
-        return StatusCode::CONFLICT.into_response();
-    }
-    if req.files.is_empty() {
-        return StatusCode::NO_CONTENT.into_response();
+    let message = text_message(&req);
+    if message.is_none() {
+        if busy(&n) {
+            return StatusCode::CONFLICT.into_response();
+        }
+        if req.files.is_empty() {
+            return StatusCode::NO_CONTENT.into_response();
+        }
     }
     // Prove the sender owns the key it claims: call it back, pinned to that key.
     let proven = discovery::verify_claim(&n, &req.info, remote.ip()).await;
@@ -110,6 +127,14 @@ async fn prepare_upload(
     let from = proven.unwrap_or_else(|| n.unverified_device(&req.info, remote.ip()));
     if from.trust == TrustLevel::Blocked {
         return StatusCode::FORBIDDEN.into_response();
+    }
+    if let Some(text) = message {
+        n.emit(Event::MessageReceived {
+            from,
+            text,
+            sender_verified,
+        });
+        return StatusCode::NO_CONTENT.into_response();
     }
     let files: Vec<FileMeta> = req.files.into_values().collect();
     let total: u64 = files.iter().map(|f| f.size).sum();

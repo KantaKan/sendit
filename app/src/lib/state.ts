@@ -1,7 +1,7 @@
 import type { CoreEvent, Device, Direction, FailReason, FileMeta, KnownDevice } from './types';
 
 export type TicketStatus =
-  | 'pending' | 'accepting' | 'live' | 'done' | 'failed' | 'declined' | 'cancelled' | 'expired';
+  | 'pending' | 'accepting' | 'live' | 'done' | 'failed' | 'declined' | 'cancelled' | 'expired' | 'message';
 
 export interface Ticket {
   key: string;
@@ -18,6 +18,8 @@ export interface Ticket {
   sources: string[];
   senderVerified?: boolean;
   fitsOnDisk?: boolean;
+  /** text of a LocalSend text message (status 'message') */
+  text?: string;
   /** ms timestamp the ticket appeared */
   at: number;
 }
@@ -96,6 +98,24 @@ export function apply(s: State, e: CoreEvent, now: number): State {
         at: now,
       };
       return { ...s, tickets: [...s.tickets, ticket] };
+    }
+    case 'messageReceived': {
+      const devices = s.devices[e.from.fingerprint] ? s.devices : { ...s.devices, [e.from.fingerprint]: e.from };
+      const ticket: Ticket = {
+        key: `msg:${s.tickets.length}`,
+        peer: e.from.fingerprint,
+        direction: 'incoming',
+        files: [],
+        total: 0,
+        bytes: 0,
+        status: 'message',
+        paths: [],
+        sources: [],
+        senderVerified: e.senderVerified,
+        text: e.text,
+        at: now,
+      };
+      return { ...s, devices, tickets: [...s.tickets, ticket] };
     }
     case 'requestExpired':
       return patch(

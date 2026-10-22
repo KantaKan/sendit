@@ -272,6 +272,13 @@ async fn receive(node: &Node, yes: bool) -> BoxResult<()> {
                         let _ = node.respond(&request.request_id, Decision::Decline);
                     }
                 }
+                Ok(Event::MessageReceived { from, text, sender_verified }) => {
+                    let note = if sender_verified { "" } else { " (unverified sender)" };
+                    println!("{} says{note}:", clean(&from.alias));
+                    for line in text.lines() {
+                        println!("  {}", clean(line));
+                    }
+                }
                 Ok(Event::TransferDone { direction: Direction::Incoming, paths, .. }) => {
                     for p in paths {
                         println!("saved {}", p.display());

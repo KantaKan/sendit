@@ -31,6 +31,10 @@ export function createStore(bridge: Bridge) {
         bridge.notify(`${e.request.from.alias} wants to send files`, `${e.request.files.length} file(s)`);
       }
     }
+    if (e.type === 'messageReceived') {
+      selected ??= e.from.fingerprint;
+      if (!document.hasFocus()) bridge.notify(`${e.from.alias} sent a message`, e.text.slice(0, 120));
+    }
     if (e.type === 'identityChanged' && selected === e.oldFingerprint) selected = e.device.fingerprint;
     if (e.type === 'deviceUpdated' || e.type === 'identityChanged') refreshKnown();
   }

@@ -98,6 +98,12 @@ pub enum Event {
     IncomingRequest {
         request: IncomingRequest,
     },
+    /// A LocalSend text message. Nothing is written to disk.
+    MessageReceived {
+        from: Device,
+        text: String,
+        sender_verified: bool,
+    },
     /// An IncomingRequest that was never answered (timeout or sender hung up).
     RequestExpired {
         request_id: String,
@@ -287,6 +293,23 @@ mod tests {
         .unwrap();
         assert_eq!(v["sources"][0], "/a");
         assert_eq!(v["requestId"], serde_json::Value::Null);
+        let v = serde_json::to_value(Event::MessageReceived {
+            from: Device {
+                fingerprint: "AB".into(),
+                alias: "x".into(),
+                device_model: None,
+                device_type: None,
+                addr: "10.0.0.2:53317".parse().unwrap(),
+                trust: TrustLevel::Known,
+                is_sendit: false,
+            },
+            text: "hi".into(),
+            sender_verified: true,
+        })
+        .unwrap();
+        assert_eq!(v["type"], "messageReceived");
+        assert_eq!(v["senderVerified"], true);
+        assert_eq!(v["from"]["alias"], "x");
         let v = serde_json::to_value(Event::RequestExpired {
             request_id: "r".into(),
         })

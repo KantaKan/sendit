@@ -75,3 +75,10 @@ test('dropping with no device selected explains what to do', async ({ page }) =>
   await expect(page.getByRole('alert')).toContainText('Pick a device first');
   expect(await calls(page, 'sendFiles')).toEqual([]);
 });
+
+test('a text message from LocalSend shows as text', async ({ page }) => {
+  await boot(page, { devices: [PIXEL] });
+  await emit(page, { type: 'messageReceived', from: PIXEL, text: 'hello from my phone', senderVerified: true });
+  await expect(page.getByText('hello from my phone')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show in folder' })).toHaveCount(0);
+});
