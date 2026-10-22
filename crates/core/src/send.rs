@@ -47,6 +47,7 @@ pub(crate) async fn send(
         .insert(id.clone(), cancel.clone());
     n.emit(Event::TransferStarted {
         transfer_id: id.clone(),
+        request_id: None,
         direction: Direction::Outgoing,
         peer: device.fingerprint.clone(),
         files: files.iter().map(|(m, _)| m.clone()).collect(),

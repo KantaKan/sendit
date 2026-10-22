@@ -228,3 +228,55 @@ async fn cancel_endpoint_fails_the_session() {
     };
     assert_eq!(reason, FailReason::Cancelled);
 }
+
+/// A sender that hangs up while we wait for the user must not leave the
+/// request (or the receiver's "busy" state) behind.
+#[tokio::test(flavor = "multi_thread")]
+async fn abandoned_request_expires_and_frees_the_slot() {
+    let b = peer("bob").await; // nobody answers; request_timeout = 5s
+    let mut rx = b.node.subscribe();
+    let c = PeerClient::new(Some(b.node.fingerprint())).unwrap();
+    let req = PrepareUploadRequest {
+        info: fake_info(),
+        files: [("1".to_string(), meta("1", "a.txt", 1, None))].into(),
+    };
+    let url = format!("https://{}{API}/prepare-upload", b.addr());
+    let sender = tokio::spawn(async move { c.http.post(url).json(&req).send().await });
+    let Event::IncomingRequest { request } =
+        wait_for(&mut rx, |e| matches!(e, Event::IncomingRequest { .. })).await
+    else {
+        unreachable!()
+    };
+    sender.abort(); // the sender hangs up while we wait for the user
+    let Event::RequestExpired { request_id } =
+        wait_for(&mut rx, |e| matches!(e, Event::RequestExpired { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(request_id, request.request_id);
+    assert!(b
+        .node
+        .respond(&request_id, sendit_core::Decision::Accept { dest: None })
+        .is_err());
+    assert_eq!(prepare(&b, vec![], None).await.status(), 204);
+}
+
+/// The incoming transfer names the request it came from, so a UI can match them.
+#[tokio::test(flavor = "multi_thread")]
+async fn accepted_transfer_names_its_request() {
+    let b = peer("bob").await;
+    auto_accept(&b.node);
+    let mut rx = b.node.subscribe();
+    accepted(&b, vec![meta("1", "a.txt", 1, None)]).await;
+    let Event::IncomingRequest { request } =
+        wait_for(&mut rx, |e| matches!(e, Event::IncomingRequest { .. })).await
+    else {
+        unreachable!()
+    };
+    let Event::TransferStarted { request_id, .. } =
+        wait_for(&mut rx, |e| matches!(e, Event::TransferStarted { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(request_id, Some(request.request_id));
+}

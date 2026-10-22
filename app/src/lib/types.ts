@@ -61,9 +61,12 @@ export type CoreEvent =
   | { type: 'deviceUpdated'; device: Device }
   | { type: 'identityChanged'; alias: string; oldFingerprint: string; device: Device }
   | { type: 'incomingRequest'; request: IncomingRequest }
+  | { type: 'requestExpired'; requestId: string }
   | {
       type: 'transferStarted';
       transferId: string;
+      /** set when this transfer was accepted from an IncomingRequest */
+      requestId: string | null;
       direction: Direction;
       peer: string;
       files: FileMeta[];

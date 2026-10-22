@@ -82,6 +82,7 @@ impl Inner {
         files: Vec<FileMeta>,
         total: u64,
         dest: PathBuf,
+        request_id: Option<String>,
     ) -> Option<PrepareUploadResponse> {
         let id = Uuid::new_v4().to_string();
         let meter = Meter::new(self.events.clone(), id.clone(), Direction::Incoming, total);
@@ -117,6 +118,7 @@ impl Inner {
         }
         self.emit(Event::TransferStarted {
             transfer_id: id.clone(),
+            request_id,
             direction: Direction::Incoming,
             peer: from.fingerprint,
             files,

@@ -10,8 +10,10 @@ const request = (id = 'r1', from = PIXEL): CoreEvent => ({
   type: 'incomingRequest',
   request: { requestId: id, from, files: [file('a.jpg', 10)], totalSize: 10, fitsOnDisk: true, senderVerified: false },
 });
-const started = (dir: 'incoming' | 'outgoing', id = 't1', sources: string[] = []): CoreEvent => ({
-  type: 'transferStarted', transferId: id, direction: dir, peer: PIXEL.fingerprint, files: [file('a.jpg', 10)], total: 10, sources,
+const started = (
+  dir: 'incoming' | 'outgoing', id = 't1', sources: string[] = [], requestId: string | null = null,
+): CoreEvent => ({
+  type: 'transferStarted', transferId: id, requestId, direction: dir, peer: PIXEL.fingerprint, files: [file('a.jpg', 10)], total: 10, sources,
 });
 
 describe('apply', () => {
@@ -32,10 +34,31 @@ describe('apply', () => {
     let s = apply(initial(), request(), 1);
     s = markAccepting(s, 'r1');
     expect(ticketsFor(s, PIXEL.fingerprint)[0].status).toBe('accepting');
-    s = apply(s, started('incoming'), 2);
+    s = apply(s, started('incoming', 't1', [], 'r1'), 2);
     const tickets = ticketsFor(s, PIXEL.fingerprint);
     expect(tickets).toHaveLength(1);
-    expect(tickets[0]).toMatchObject({ status: 'live', transferId: 't1' });
+    expect(tickets[0]).toMatchObject({ status: 'live', transferId: 't1', at: 2 });
+  });
+
+  test('transfers match their own request even with two from the same peer', () => {
+    let s = apply(initial(), request('r1'), 1);
+    s = apply(s, request('r2'), 1);
+    s = markAccepting(s, 'r1');
+    s = markAccepting(s, 'r2');
+    s = apply(s, started('incoming', 't2', [], 'r2'), 2);
+    const [a, b] = ticketsFor(s, PIXEL.fingerprint);
+    expect(a).toMatchObject({ requestId: 'r1', status: 'accepting' });
+    expect(b).toMatchObject({ requestId: 'r2', status: 'live', transferId: 't2' });
+  });
+
+  test('requestExpired expires an unanswered request but leaves started ones alone', () => {
+    let s = apply(initial(), request('r1'), 1);
+    s = apply(s, request('r2'), 1);
+    s = markAccepting(s, 'r2');
+    s = apply(s, started('incoming', 't2', [], 'r2'), 2);
+    s = apply(s, { type: 'requestExpired', requestId: 'r1' }, 3);
+    s = apply(s, { type: 'requestExpired', requestId: 'r2' }, 3);
+    expect(ticketsFor(s, PIXEL.fingerprint).map((t) => t.status)).toEqual(['expired', 'live']);
   });
 
   test('auto-accepted incoming transfer without a request still gets a ticket', () => {

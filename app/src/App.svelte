@@ -16,6 +16,12 @@
   onMount(() => store.start());
 
   const near = $derived(nearby(store.state));
+  const waiting = $derived(
+    store.state.tickets.reduce<Record<string, number>>((acc, t) => {
+      if (t.status === 'pending') acc[t.peer] = (acc[t.peer] ?? 0) + 1;
+      return acc;
+    }, {}),
+  );
 </script>
 
 <div class="shell">
@@ -25,6 +31,7 @@
     seenBefore={seenBefore(store.state)}
     selected={store.selected}
     searching={store.searching}
+    {waiting}
     onselect={store.select}
     onrefresh={store.refresh}
   />

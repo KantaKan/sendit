@@ -98,8 +98,14 @@ pub enum Event {
     IncomingRequest {
         request: IncomingRequest,
     },
+    /// An IncomingRequest that was never answered (timeout or sender hung up).
+    RequestExpired {
+        request_id: String,
+    },
     TransferStarted {
         transfer_id: String,
+        /// The IncomingRequest this transfer was accepted from, if any.
+        request_id: Option<String>,
         direction: Direction,
         peer: String,
         files: Vec<FileMeta>,
@@ -271,6 +277,7 @@ mod tests {
         );
         let v = serde_json::to_value(Event::TransferStarted {
             transfer_id: "t".into(),
+            request_id: None,
             direction: Direction::Outgoing,
             peer: "AB".into(),
             files: vec![],
@@ -279,5 +286,14 @@ mod tests {
         })
         .unwrap();
         assert_eq!(v["sources"][0], "/a");
+        assert_eq!(v["requestId"], serde_json::Value::Null);
+        let v = serde_json::to_value(Event::RequestExpired {
+            request_id: "r".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            (v["type"].as_str(), v["requestId"].as_str()),
+            (Some("requestExpired"), Some("r"))
+        );
     }
 }

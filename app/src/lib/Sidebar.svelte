@@ -4,13 +4,15 @@
   import type { AppInfo, Device, KnownDevice } from './types';
 
   let {
-    me, nearby, seenBefore, selected, searching, onselect, onrefresh,
+    me, nearby, seenBefore, selected, searching, waiting, onselect, onrefresh,
   }: {
     me: AppInfo | null;
     nearby: Device[];
     seenBefore: KnownDevice[];
     selected: string | null;
     searching: boolean;
+    /** fingerprint -> requests waiting for an answer */
+    waiting: Record<string, number>;
     onselect: (fp: string) => void;
     onrefresh: () => void;
   } = $props();
@@ -41,6 +43,9 @@
               <b>{d.alias}</b>
               <small class="mono" class:danger={d.trust === 'suspect' || d.trust === 'blocked'}>{sub(d)}</small>
             </span>
+            {#if waiting[d.fingerprint]}
+              <span class="badge mono" aria-label="{waiting[d.fingerprint]} waiting">{waiting[d.fingerprint]}</span>
+            {/if}
           </button>
         </li>
       {/each}
@@ -71,13 +76,14 @@
   .brand { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; margin: 0 8px 18px; }
   .group { font-size: 11px; color: var(--faint); margin: 12px 8px 6px; }
   ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-  .dev { display: grid; grid-template-columns: 38px 1fr; gap: 10px; align-items: center; width: 100%; padding: 8px; border: 0; border-radius: 12px; background: none; text-align: left; transition: background 0.15s; }
+  .dev { display: grid; grid-template-columns: 38px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 8px; border: 0; border-radius: 12px; background: none; text-align: left; transition: background 0.15s; }
   button.dev:hover { background: #18181b; }
   .dev.on { background: var(--surface); }
   .dev.off { opacity: 0.45; }
   .text { min-width: 0; display: flex; flex-direction: column; }
   .text b { font-weight: 500; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .text small { font-size: 10.5px; color: var(--muted); }
+  .badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; display: grid; place-items: center; }
   .danger { color: var(--danger-text) !important; }
   .me { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 12px 8px 0; border-top: 1px solid var(--line); }
   .me .text { flex: 1; }

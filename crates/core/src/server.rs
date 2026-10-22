@@ -47,6 +47,22 @@ async fn info(State(n): State<Arc<Inner>>) -> Json<DeviceInfo> {
 // users get locked out.
 const MAX_PIN_FAILURES: u32 = 5;
 
+/// Removes an unanswered request and tells the UI it expired.
+struct ExpireOnDrop {
+    n: Arc<Inner>,
+    id: String,
+}
+
+impl Drop for ExpireOnDrop {
+    fn drop(&mut self) {
+        if self.n.pending.lock().unwrap().remove(&self.id).is_some() {
+            self.n.emit(Event::RequestExpired {
+                request_id: self.id.clone(),
+            });
+        }
+    }
+}
+
 fn busy(n: &Inner) -> bool {
     n.session.lock().unwrap().is_some() || !n.pending.lock().unwrap().is_empty()
 }
@@ -100,10 +116,11 @@ async fn prepare_upload(
     let auto = sender_verified
         && from.trust == TrustLevel::Verified
         && n.trust.lock().unwrap().auto_accept(&from.fingerprint);
+    let mut request_id = None;
     let decision = if auto {
         Decision::Accept { dest: None }
     } else {
-        let request_id = Uuid::new_v4().to_string();
+        let id = Uuid::new_v4().to_string();
         let (tx, rx) = oneshot::channel();
         {
             // Re-check: another request may have arrived during verification.
@@ -114,11 +131,16 @@ async fn prepare_upload(
             if !pending.is_empty() {
                 return StatusCode::CONFLICT.into_response();
             }
-            pending.insert(request_id.clone(), Pending { tx, total });
+            pending.insert(id.clone(), Pending { tx, total });
         }
+        // Runs on timeout and when hyper drops this future (sender hung up).
+        let _expire = ExpireOnDrop {
+            n: n.clone(),
+            id: id.clone(),
+        };
         n.emit(Event::IncomingRequest {
             request: IncomingRequest {
-                request_id: request_id.clone(),
+                request_id: id.clone(),
                 from: from.clone(),
                 files: files.clone(),
                 total_size: total,
@@ -127,7 +149,7 @@ async fn prepare_upload(
             },
         });
         let answer = tokio::time::timeout(n.cfg.request_timeout, rx).await;
-        n.pending.lock().unwrap().remove(&request_id);
+        request_id = Some(id);
         match answer {
             Ok(Ok(d)) => d,
             _ => Decision::Decline,
@@ -137,7 +159,7 @@ async fn prepare_upload(
         return StatusCode::FORBIDDEN.into_response();
     };
     let dest = dest.unwrap_or_else(|| n.cfg.download_dir.clone());
-    match n.open_session(from, files, total, dest) {
+    match n.open_session(from, files, total, dest, request_id) {
         Some(resp) => Json(resp).into_response(),
         None => StatusCode::CONFLICT.into_response(),
     }

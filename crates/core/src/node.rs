@@ -313,8 +313,9 @@ impl Node {
                 return Err(Error::DiskFull);
             }
         }
-        let _ = p.tx.send(decision);
-        Ok(())
+        // The request handler may have given up between our remove and send.
+        p.tx.send(decision)
+            .map_err(|_| Error::NoSuchRequest(request_id.into()))
     }
 
     /// Runs the whole transfer. Emits TransferStarted first, so a UI can grab

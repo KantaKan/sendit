@@ -77,11 +77,10 @@ export function apply(s: State, e: CoreEvent, now: number): State {
       return { ...s, devices, tickets: [...s.tickets, ticket] };
     }
     case 'transferStarted': {
-      if (e.direction === 'incoming') {
-        const accepting = (t: Ticket) => t.status === 'accepting' && t.peer === e.peer;
-        if (s.tickets.some(accepting)) {
-          return patch(s, accepting, () => ({ transferId: e.transferId, status: 'live', files: e.files, total: e.total }));
-        }
+      if (e.requestId && s.tickets.some(byRequest(e.requestId))) {
+        return patch(s, byRequest(e.requestId), () => ({
+          transferId: e.transferId, status: 'live', files: e.files, total: e.total, at: now,
+        }));
       }
       const ticket: Ticket = {
         key: e.transferId,
@@ -98,6 +97,12 @@ export function apply(s: State, e: CoreEvent, now: number): State {
       };
       return { ...s, tickets: [...s.tickets, ticket] };
     }
+    case 'requestExpired':
+      return patch(
+        s,
+        (t) => t.requestId === e.requestId && (t.status === 'pending' || t.status === 'accepting'),
+        () => ({ status: 'expired' }),
+      );
     case 'progress':
       return patch(s, byTransfer(e.transferId), () => ({ bytes: e.bytes }));
     case 'transferDone':

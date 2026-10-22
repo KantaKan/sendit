@@ -14,6 +14,7 @@ test('lists nearby and seen-before devices and selects on click', async () => {
       seenBefore: [{ fingerprint: 'B'.repeat(64), alias: 'Lab PC', trust: 'known' }],
       selected: pixel.fingerprint,
       searching: false,
+      waiting: { ['D'.repeat(64)]: 2 },
       onselect,
       onrefresh: vi.fn(),
     },
@@ -21,6 +22,7 @@ test('lists nearby and seen-before devices and selects on click', async () => {
   expect(screen.getByRole('button', { name: /Pixel 8/ })).toHaveAttribute('aria-current', 'true');
   expect(screen.getByText('key changed')).toBeInTheDocument();
   expect(screen.getByText('Lab PC')).toBeInTheDocument();
+  expect(screen.getByLabelText('2 waiting')).toHaveTextContent('2');
   await fireEvent.click(screen.getByRole('button', { name: /iPhone/ }));
   expect(onselect).toHaveBeenCalledWith('D'.repeat(64));
 });

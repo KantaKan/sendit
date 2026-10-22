@@ -28,7 +28,7 @@ test('flow A: accept an incoming file and reveal it', async ({ page }) => {
   await page.getByRole('button', { name: 'Accept' }).click();
   const [r] = await calls(page, 'respond');
   expect(r.args.slice(0, 2)).toEqual(['r1', true]);
-  await emit(page, { type: 'transferStarted', transferId: 't1', direction: 'incoming', peer: PIXEL.fingerprint, files: [FILE], total: FILE.size, sources: [] });
+  await emit(page, { type: 'transferStarted', transferId: 't1', requestId: 'r1', direction: 'incoming', peer: PIXEL.fingerprint, files: [FILE], total: FILE.size, sources: [] });
   await emit(page, { type: 'progress', transferId: 't1', direction: 'incoming', bytes: FILE.size / 2, total: FILE.size });
   await expect(page.getByText('50%')).toBeVisible();
   await emit(page, { type: 'transferDone', transferId: 't1', direction: 'incoming', paths: ['C:\\Users\\me\\Downloads\\sendit\\IMG_2044.jpg'] });
@@ -62,7 +62,7 @@ test('send by drop, fail, retry with the same files', async ({ page }) => {
   await drag(page, { kind: 'drop', paths: ['C:\\a.txt'] });
   expect(await calls(page, 'sendFiles')).toEqual([{ name: 'sendFiles', args: [PIXEL.fingerprint, ['C:\\a.txt']] }]);
   const f = { id: '1', fileName: 'a.txt', size: 3, fileType: 'text/plain' };
-  await emit(page, { type: 'transferStarted', transferId: 'o1', direction: 'outgoing', peer: PIXEL.fingerprint, files: [f], total: 3, sources: ['C:\\a.txt'] });
+  await emit(page, { type: 'transferStarted', transferId: 'o1', requestId: null, direction: 'outgoing', peer: PIXEL.fingerprint, files: [f], total: 3, sources: ['C:\\a.txt'] });
   await emit(page, { type: 'transferFailed', transferId: 'o1', direction: 'outgoing', reason: { kind: 'peerGone' } });
   await expect(page.getByText('Connection lost')).toBeVisible();
   await page.getByRole('button', { name: 'Retry' }).click();
