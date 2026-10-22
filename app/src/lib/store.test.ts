@@ -1,5 +1,5 @@
 import { flushSync } from 'svelte';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { createMockBridge } from './bridge-mock';
 import { device, file } from './fixtures';
 import { ticketsFor } from './state';
@@ -68,4 +68,16 @@ test('identity change moves the open conversation to the suspect key', async () 
   const suspect = { ...PIXEL, fingerprint: 'DEAD'.padEnd(64, '3'), trust: 'suspect' as const };
   m.emit({ type: 'identityChanged', alias: 'Pixel 8', oldFingerprint: PIXEL.fingerprint, device: suspect });
   expect(store.selected).toBe(suspect.fingerprint);
+});
+
+test('incoming request notifies only when the window is in the background', async () => {
+  const { m } = await setup();
+  const focus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+  m.emit({ type: 'incomingRequest', request: req });
+  focus.mockReturnValue(true);
+  m.emit({ type: 'incomingRequest', request: { ...req, requestId: 'r2' } });
+  expect(m.calls.filter((c) => c.name === 'notify')).toEqual([
+    { name: 'notify', args: ['Pixel 8 wants to send files', '1 file(s)'] },
+  ]);
+  focus.mockRestore();
 });

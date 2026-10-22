@@ -4,6 +4,7 @@
   import Conversation from './lib/Conversation.svelte';
   import DropOverlay from './lib/DropOverlay.svelte';
   import EmptyState from './lib/EmptyState.svelte';
+  import PortBanner from './lib/PortBanner.svelte';
   import Sidebar from './lib/Sidebar.svelte';
   import { nearby, seenBefore, ticketsFor } from './lib/state';
   import { createStore } from './lib/store.svelte';
@@ -28,6 +29,7 @@
     onrefresh={store.refresh}
   />
   <main>
+    {#if store.me?.portFallback}<PortBanner port={store.me.port} />{/if}
     {#if store.error}
       <div class="error" role="alert">
         <span>{store.error}</span>
