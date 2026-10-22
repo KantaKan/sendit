@@ -123,11 +123,8 @@ pub enum Event {
     },
 }
 
-// TODO(task 8): remove once receive/send use Meter.
-#[allow(dead_code)]
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
-#[allow(dead_code)]
 /// Counts bytes of one transfer and emits throttled `Progress` events.
 pub(crate) struct Meter {
     tx: broadcast::Sender<Event>,
@@ -138,7 +135,6 @@ pub(crate) struct Meter {
     last: Mutex<Instant>,
 }
 
-#[allow(dead_code)]
 impl Meter {
     pub(crate) fn new(
         tx: broadcast::Sender<Event>,
@@ -175,7 +171,6 @@ impl Meter {
     }
 }
 
-#[allow(dead_code)]
 /// Resolves once `meter` makes no progress for a whole `idle` period.
 pub(crate) async fn stalled(meter: &Meter, idle: Duration) {
     let mut last = meter.done();

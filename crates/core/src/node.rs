@@ -1,9 +1,10 @@
 use crate::{
     discovery,
-    error::Result,
+    error::{Error, Result},
     events::{Device, Event},
     identity::Identity,
     protocol::*,
+    receive::{has_space, Pending, Session},
     server, tls,
     trust::{Observation, TrustStore},
 };
@@ -61,6 +62,18 @@ pub(crate) struct Inner {
     /// Keyed by uppercase fingerprint.
     pub devices: Mutex<HashMap<String, Device>>,
     pub events: broadcast::Sender<Event>,
+    pub pending: Mutex<HashMap<String, Pending>>,
+    /// LocalSend allows one incoming session at a time; others get 409.
+    pub session: Mutex<Option<Session>>,
+}
+
+#[derive(Clone, Debug)]
+pub enum Decision {
+    /// `dest = None` uses `Config::download_dir`.
+    Accept {
+        dest: Option<PathBuf>,
+    },
+    Decline,
 }
 
 impl Inner {
@@ -150,6 +163,8 @@ impl Node {
             trust: Mutex::new(trust),
             devices: Mutex::new(HashMap::new()),
             events,
+            pending: Mutex::new(HashMap::new()),
+            session: Mutex::new(None),
         });
         let tls = RustlsConfig::from_config(tls::server_config(&inner.identity)?);
         let app = server::router(inner.clone()).into_make_service_with_connect_info::<SocketAddr>();
@@ -241,6 +256,27 @@ impl Node {
         let alias = self.device(&fp).map(|d| d.alias).unwrap_or_default();
         self.inner.trust.lock().unwrap().block(&fp, &alias);
         self.refresh(&fp);
+    }
+
+    /// Answer an `Event::IncomingRequest`. If there is not enough space in the
+    /// destination, returns `Error::DiskFull` and the request stays pending,
+    /// so the caller can pick another folder or decline.
+    pub fn respond(&self, request_id: &str, decision: Decision) -> Result<()> {
+        let mut pending = self.inner.pending.lock().unwrap();
+        let p = pending
+            .remove(request_id)
+            .ok_or_else(|| Error::NoSuchRequest(request_id.into()))?;
+        if let Decision::Accept { dest } = &decision {
+            let dir = dest
+                .clone()
+                .unwrap_or_else(|| self.inner.cfg.download_dir.clone());
+            if !has_space(&dir, p.total) {
+                pending.insert(request_id.to_string(), p);
+                return Err(Error::DiskFull);
+            }
+        }
+        let _ = p.tx.send(decision);
+        Ok(())
     }
 
     pub fn shutdown(&self) {

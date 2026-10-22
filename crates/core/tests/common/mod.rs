@@ -4,6 +4,123 @@ use std::{net::SocketAddr, path::PathBuf, time::Duration};
 use tempfile::TempDir;
 use tokio::sync::broadcast;
 
+use sendit_core::{protocol::*, tls::PeerClient, Decision};
+use sha2::{Digest, Sha256};
+use std::path::Path;
+
+pub fn auto_accept(node: &Node) {
+    respond_all(node, || Decision::Accept { dest: None });
+}
+
+pub fn auto_decline(node: &Node) {
+    respond_all(node, || Decision::Decline);
+}
+
+fn respond_all(node: &Node, d: impl Fn() -> Decision + Send + 'static) {
+    let n = node.clone();
+    let mut rx = node.subscribe();
+    tokio::spawn(async move {
+        while let Ok(e) = rx.recv().await {
+            if let Event::IncomingRequest { request } = e {
+                let _ = n.respond(&request.request_id, d());
+            }
+        }
+    });
+}
+
+pub fn pattern(len: usize) -> Vec<u8> {
+    (0..len).map(|i| (i.wrapping_mul(31) % 251) as u8).collect()
+}
+
+pub fn write_file(dir: &Path, rel: &str, len: usize) -> PathBuf {
+    let p = dir.join(rel);
+    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+    std::fs::write(&p, pattern(len)).unwrap();
+    p
+}
+
+pub fn sha(path: &Path) -> String {
+    hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
+}
+
+/// True if no partial file is left anywhere under `dir`.
+pub fn no_part_files(dir: &Path) -> bool {
+    walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .all(|e| !e.file_name().to_string_lossy().ends_with(".sendit-part"))
+}
+
+pub async fn eventually(mut f: impl FnMut() -> bool) {
+    for _ in 0..50 {
+        if f() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("condition never became true");
+}
+
+pub fn fake_info() -> DeviceInfo {
+    DeviceInfo {
+        alias: "mallory".into(),
+        version: "2.1".into(),
+        device_model: None,
+        device_type: Some("desktop".into()),
+        fingerprint: "F".repeat(64),
+        // nothing listens here, so the call-back verification fails fast
+        port: 1,
+        protocol: Scheme::Https,
+        download: false,
+        sendit: None,
+    }
+}
+
+pub fn meta(id: &str, name: &str, size: u64, sha256: Option<String>) -> FileMeta {
+    FileMeta {
+        id: id.into(),
+        file_name: name.into(),
+        size,
+        file_type: "application/octet-stream".into(),
+        sha256,
+        preview: None,
+        metadata: None,
+    }
+}
+
+pub async fn prepare(to: &Peer, files: Vec<FileMeta>, pin: Option<&str>) -> reqwest::Response {
+    let c = PeerClient::new(Some(to.node.fingerprint())).unwrap();
+    let req = PrepareUploadRequest {
+        info: fake_info(),
+        files: files.into_iter().map(|f| (f.id.clone(), f)).collect(),
+    };
+    let mut r = c
+        .http
+        .post(format!("https://{}{API}/prepare-upload", to.addr()))
+        .json(&req);
+    if let Some(p) = pin {
+        r = r.query(&[("pin", p)]);
+    }
+    r.send().await.unwrap()
+}
+
+pub async fn upload(to: &Peer, session: &str, file_id: &str, token: &str, body: Vec<u8>) -> u16 {
+    let c = PeerClient::new(Some(to.node.fingerprint())).unwrap();
+    c.http
+        .post(format!("https://{}{API}/upload", to.addr()))
+        .query(&[
+            ("sessionId", session),
+            ("fileId", file_id),
+            ("token", token),
+        ])
+        .body(body)
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .as_u16()
+}
+
 pub struct Peer {
     pub node: Node,
     pub dir: TempDir,
