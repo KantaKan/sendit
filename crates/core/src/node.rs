@@ -252,7 +252,7 @@ impl Node {
             .values()
             .cloned()
             .collect();
-        v.sort_by(|a, b| a.alias.to_lowercase().cmp(&b.alias.to_lowercase()));
+        v.sort_by_key(|d| d.alias.to_lowercase());
         v
     }
 

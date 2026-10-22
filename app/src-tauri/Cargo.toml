@@ -1,0 +1,25 @@
+[package]
+name = "sendit-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "sendit_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+gethostname = "0.5"
+sendit-core = { path = "../../crates/core" }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3"

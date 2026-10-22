@@ -5,3 +5,8 @@ fuzz/target/
 fuzz/corpus/
 fuzz/artifacts/
 fuzz/Cargo.lock
+app/node_modules/
+app/dist/
+app/test-results/
+app/playwright-report/
+app/src-tauri/gen/
