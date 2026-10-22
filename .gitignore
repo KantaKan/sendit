@@ -1,3 +1,6 @@
 .superpowers/
 target/
 node_modules/
+fuzz/target/
+fuzz/corpus/
+fuzz/artifacts/
