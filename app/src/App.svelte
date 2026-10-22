@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Bridge } from './lib/bridge';
+  import Conversation from './lib/Conversation.svelte';
+  import DropOverlay from './lib/DropOverlay.svelte';
   import EmptyState from './lib/EmptyState.svelte';
   import Sidebar from './lib/Sidebar.svelte';
-  import { nearby, seenBefore } from './lib/state';
+  import { nearby, seenBefore, ticketsFor } from './lib/state';
   import { createStore } from './lib/store.svelte';
 
   let { bridge }: { bridge: Bridge } = $props();
@@ -32,14 +34,25 @@
         <button onclick={store.dismissError}>Dismiss</button>
       </div>
     {/if}
-    <EmptyState
-      hasDevices={near.length > 0}
-      searching={store.searching}
-      onrefresh={store.refresh}
-      onscan={store.scan}
-      onaddpeer={store.addPeer}
-    />
+    {#if store.selectedDevice}
+      <Conversation
+        device={store.selectedDevice}
+        tickets={ticketsFor(store.state, store.selectedDevice.fingerprint)}
+        me={store.me}
+        oldFingerprint={store.state.identityChanges[store.selectedDevice.fingerprint]}
+        {store}
+      />
+    {:else}
+      <EmptyState
+        hasDevices={near.length > 0}
+        searching={store.searching}
+        onrefresh={store.refresh}
+        onscan={store.scan}
+        onaddpeer={store.addPeer}
+      />
+    {/if}
   </main>
+  <DropOverlay visible={store.dragging} target={store.selectedDevice?.alias ?? null} />
 </div>
 
 <style>
