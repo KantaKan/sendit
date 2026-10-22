@@ -49,6 +49,7 @@ fn send_and_receive_over_loopback() {
         "hi from cli"
     );
     rx.kill().unwrap();
+    rx.wait().unwrap();
 }
 
 #[test]
