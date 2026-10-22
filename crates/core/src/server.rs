@@ -148,7 +148,7 @@ async fn upload(
     Query(q): Query<UploadQuery>,
     body: Body,
 ) -> StatusCode {
-    let (meta, dest, meter, cancel) = match n.claim_file(&q) {
+    let (meta, dest, meter, cancel, why) = match n.claim_file(&q) {
         Ok(c) => c,
         Err(code) => return code,
     };
@@ -158,6 +158,11 @@ async fn upload(
             StatusCode::OK
         }
         Err(reason) => {
+            // Stopped by the session ending: answer with the session's reason.
+            let reason = match reason {
+                FailReason::Cancelled => why.get().cloned().unwrap_or(reason),
+                other => other,
+            };
             let code = reason.status();
             n.fail_incoming(&q.session_id, reason);
             code

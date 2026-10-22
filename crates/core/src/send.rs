@@ -182,6 +182,7 @@ async fn upload_one(
     match resp.status().as_u16() {
         200 => Ok(()),
         422 => Err(FailReason::Checksum),
+        408 => Err(FailReason::PeerGone),
         403 | 409 => Err(FailReason::Cancelled),
         s => Err(FailReason::Protocol(format!("upload returned {s}"))),
     }

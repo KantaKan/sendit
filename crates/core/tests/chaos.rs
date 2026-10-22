@@ -116,3 +116,27 @@ async fn sender_cancel_mid_transfer() {
     let down = b.down();
     eventually(|| no_part_files(&down)).await;
 }
+
+/// When the receiver's watchdog fires first, the sender must still see
+/// "connection lost", not "cancelled".
+#[tokio::test(flavor = "multi_thread")]
+async fn receiver_timeout_reads_as_peer_gone_for_sender() {
+    let a = peer_with("alice", |c| {
+        c.idle_timeout = std::time::Duration::from_secs(10)
+    })
+    .await;
+    let b = peer("bob").await; // idle_timeout = 1s, fires first
+    auto_accept(&b.node);
+    let via = proxy(b.addr(), Chaos::Stall(MB as u64)).await;
+    a.node.add_peer(via).await.unwrap();
+    let src = write_file(a.dir.path(), "stall2.bin", 8 * MB);
+    let err = a
+        .node
+        .send(b.node.fingerprint(), vec![src], None)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::Transfer(FailReason::PeerGone)),
+        "{err:?}"
+    );
+}

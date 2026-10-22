@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 use tokio::{io::AsyncWriteExt, sync::oneshot};
 use tokio_util::sync::CancellationToken;
@@ -30,6 +30,8 @@ pub(crate) struct Session {
     pub files: HashMap<String, Slot>,
     pub meter: Arc<Meter>,
     pub cancel: CancellationToken,
+    /// Why the session ended early, so in-flight uploads answer accordingly.
+    pub why: Arc<OnceLock<FailReason>>,
     pub paths: Vec<PathBuf>,
 }
 
@@ -56,14 +58,21 @@ impl FailReason {
     pub(crate) fn status(&self) -> StatusCode {
         match self {
             Self::Checksum => StatusCode::UNPROCESSABLE_ENTITY,
-            Self::Protocol(_) | Self::PeerGone => StatusCode::BAD_REQUEST,
+            Self::Protocol(_) => StatusCode::BAD_REQUEST,
+            Self::PeerGone => StatusCode::REQUEST_TIMEOUT,
             Self::Cancelled => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
-type Claim = (FileMeta, PathBuf, Arc<Meter>, CancellationToken);
+type Claim = (
+    FileMeta,
+    PathBuf,
+    Arc<Meter>,
+    CancellationToken,
+    Arc<OnceLock<FailReason>>,
+);
 
 impl Inner {
     /// Returns None if another session is already active.
@@ -102,6 +111,7 @@ impl Inner {
                 files: slots,
                 meter: meter.clone(),
                 cancel: cancel.clone(),
+                why: Arc::new(OnceLock::new()),
                 paths: vec![],
             });
         }
@@ -143,6 +153,7 @@ impl Inner {
             s.dest.clone(),
             s.meter.clone(),
             s.cancel.clone(),
+            s.why.clone(),
         ))
     }
 
@@ -183,6 +194,7 @@ impl Inner {
             }
         };
         let Some(s) = taken else { return false };
+        let _ = s.why.set(reason.clone());
         s.cancel.cancel();
         self.emit(Event::TransferFailed {
             transfer_id: s.id,
