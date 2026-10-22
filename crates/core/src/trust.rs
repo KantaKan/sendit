@@ -103,6 +103,22 @@ impl TrustStore {
         }
     }
 
+    /// What `observe` would conclude, without pinning anything. Used for
+    /// claims we could not prove (the peer may be lying about its key).
+    pub fn peek(&self, fp: &str, alias: &str) -> TrustLevel {
+        match self.level(fp) {
+            TrustLevel::New
+                if self
+                    .records
+                    .values()
+                    .any(|r| r.alias == alias && !r.blocked) =>
+            {
+                TrustLevel::Suspect
+            }
+            level => level,
+        }
+    }
+
     pub fn auto_accept(&self, fp: &str) -> bool {
         self.records
             .get(fp)
@@ -204,6 +220,17 @@ mod tests {
         t.block("CC", "mallory");
         assert_eq!(t.level("CC"), TrustLevel::Blocked);
         assert_eq!(t.observe("CC", "mallory"), Observation::Seen);
+    }
+
+    #[test]
+    fn peek_predicts_without_pinning() {
+        let mut t = TrustStore::in_memory();
+        t.observe("AA", "bob");
+        assert_eq!(t.peek("BB", "bob"), TrustLevel::Suspect);
+        assert_eq!(t.peek("CC", "carol"), TrustLevel::New);
+        assert_eq!(t.peek("AA", "x"), TrustLevel::Known);
+        assert_eq!(t.level("BB"), TrustLevel::New);
+        assert_eq!(t.observe("CC", "carol"), Observation::New);
     }
 
     #[test]

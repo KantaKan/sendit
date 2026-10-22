@@ -10,7 +10,7 @@ use crate::{
 };
 use axum_server::tls_rustls::RustlsConfig;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -71,6 +71,9 @@ pub(crate) struct Inner {
     /// LocalSend allows one incoming session at a time; others get 409.
     pub session: Mutex<Option<Session>>,
     pub outgoing: Mutex<HashMap<String, CancellationToken>>,
+    /// Fingerprints we are currently proving via `discovery::verify_claim`.
+    pub verifying: Mutex<HashSet<String>>,
+    pub pin_failures: Mutex<HashMap<IpAddr, u32>>,
 }
 
 #[derive(Clone, Debug)]
@@ -101,7 +104,23 @@ impl Inner {
         }
     }
 
-    /// Records a peer we heard from. Returns None if `info` is ourselves.
+    /// A peer's unproven claim, for display only: nothing is stored or pinned.
+    pub(crate) fn unverified_device(&self, info: &DeviceInfo, ip: IpAddr) -> Device {
+        let fp = info.fingerprint.to_uppercase();
+        let trust = self.trust.lock().unwrap().peek(&fp, &info.alias);
+        Device {
+            fingerprint: fp,
+            alias: info.alias.clone(),
+            device_model: info.device_model.clone(),
+            device_type: info.device_type.clone(),
+            addr: SocketAddr::new(ip, info.port),
+            trust,
+            is_sendit: info.sendit.is_some(),
+        }
+    }
+
+    /// Records a peer whose key was proven over TLS (only `register_with` calls
+    /// this). Returns None if `info` is ourselves.
     pub(crate) fn see_device(&self, info: &DeviceInfo, ip: IpAddr) -> Option<Device> {
         if info
             .fingerprint
@@ -154,7 +173,13 @@ impl Node {
         let trust = TrustStore::load(cfg.data_dir.join("trust.json"));
         let (listener, port_fallback) = match TcpListener::bind((cfg.bind, cfg.port)) {
             Ok(l) => (l, false),
-            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse && cfg.port != 0 => {
+            // Windows reports ports inside Hyper-V/WinNAT reserved ranges as PermissionDenied.
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::AddrInUse | std::io::ErrorKind::PermissionDenied
+                ) && cfg.port != 0 =>
+            {
                 (TcpListener::bind((cfg.bind, 0))?, true)
             }
             Err(e) => return Err(e.into()),
@@ -172,6 +197,8 @@ impl Node {
             pending: Mutex::new(HashMap::new()),
             session: Mutex::new(None),
             outgoing: Mutex::new(HashMap::new()),
+            verifying: Mutex::new(HashSet::new()),
+            pin_failures: Mutex::new(HashMap::new()),
         });
         let tls = RustlsConfig::from_config(tls::server_config(&inner.identity)?);
         let app = server::router(inner.clone()).into_make_service_with_connect_info::<SocketAddr>();

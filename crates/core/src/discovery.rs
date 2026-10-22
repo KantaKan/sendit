@@ -43,6 +43,28 @@ pub(crate) async fn register_with(
     n.see_device(&info, addr.ip()).ok_or(Error::SelfDevice)
 }
 
+/// Prove an unproven claim by calling the claimed address, pinned to the
+/// claimed key. Only a proven claim is stored or allowed to touch the trust store.
+pub(crate) async fn verify_claim(n: &Inner, info: &DeviceInfo, ip: IpAddr) -> Option<Device> {
+    if info.protocol != Scheme::Https {
+        return None;
+    }
+    let fp = info.fingerprint.to_uppercase();
+    let addr = SocketAddr::new(ip, info.port);
+    if let Some(d) = n.devices.lock().unwrap().get(&fp) {
+        if d.addr == addr {
+            return Some(d.clone());
+        }
+    }
+    // Two sendit nodes verifying each other would otherwise ping-pong forever.
+    if !n.verifying.lock().unwrap().insert(fp.clone()) {
+        return None;
+    }
+    let proven = register_with(n, addr, Some(&fp)).await.ok();
+    n.verifying.lock().unwrap().remove(&fp);
+    proven
+}
+
 pub(crate) fn accept_announcement(a: &Announcement, own_fp: &str) -> bool {
     // ponytail: LocalSend's "encryption off" mode has no cert to pin; ignored in v1.
     !a.info.fingerprint.eq_ignore_ascii_case(own_fp) && a.info.protocol == Scheme::Https
@@ -108,7 +130,7 @@ pub(crate) fn spawn_listener(n: Arc<Inner>) -> std::io::Result<()> {
 
 async fn handle_announcement(n: &Arc<Inner>, a: Announcement, ip: IpAddr) {
     if !a.announce {
-        n.see_device(&a.info, ip);
+        verify_claim(n, &a.info, ip).await;
         return;
     }
     // Answer like LocalSend does: HTTP /register first, UDP reply if that fails.
@@ -117,7 +139,6 @@ async fn handle_announcement(n: &Arc<Inner>, a: Announcement, ip: IpAddr) {
         .await
         .is_err()
     {
-        n.see_device(&a.info, ip);
         send_announcement(n, false);
     }
 }

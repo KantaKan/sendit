@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 use tokio::{io::AsyncWriteExt, sync::oneshot};
 use tokio_util::sync::CancellationToken;
@@ -203,18 +203,37 @@ pub(crate) async fn write_file(
     let target = dest.join(&rel);
     let dir = target.parent().unwrap_or(dest).to_path_buf();
     tokio::fs::create_dir_all(&dir).await?;
+    // A junction/symlink already inside `dest` must not lead writes outside it.
+    let inside = match (std::fs::canonicalize(&dir), std::fs::canonicalize(dest)) {
+        (Ok(d), Ok(root)) => d.starts_with(root),
+        _ => false,
+    };
+    if !inside {
+        return Err(FailReason::Protocol(
+            "path leaves the download folder".into(),
+        ));
+    }
     let part = dir.join(format!(".{}{PART_SUFFIX}", Uuid::new_v4()));
     let result: Result<PathBuf, FailReason> = async {
         stream_into(&part, meta, body, meter, cancel).await?;
-        let final_path = unique_path(dest, &rel);
-        tokio::fs::rename(&part, &final_path).await?;
-        Ok(final_path)
+        Ok(finalize(&part, dest, &rel)?)
     }
     .await;
     if result.is_err() {
         let _ = tokio::fs::remove_file(&part).await;
     }
     result
+}
+
+// ponytail: one global lock around pick-a-free-name + rename (rename replaces
+// existing files); per-directory locks if this ever shows up in a profile.
+static FINALIZE: Mutex<()> = Mutex::new(());
+
+fn finalize(part: &Path, dest: &Path, rel: &Path) -> std::io::Result<PathBuf> {
+    let _guard = FINALIZE.lock().unwrap_or_else(|e| e.into_inner());
+    let final_path = unique_path(dest, rel);
+    std::fs::rename(part, &final_path)?;
+    Ok(final_path)
 }
 
 async fn stream_into(

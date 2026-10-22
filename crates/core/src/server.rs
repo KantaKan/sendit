@@ -11,7 +11,7 @@ use axum::{
     extract::{ConnectInfo, DefaultBodyLimit, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use std::{net::SocketAddr, sync::Arc};
@@ -21,6 +21,7 @@ use uuid::Uuid;
 pub(crate) fn router(n: Arc<Inner>) -> Router {
     Router::new()
         .route(&format!("{API}/register"), post(register))
+        .route(&format!("{API}/info"), get(info))
         .route(&format!("{API}/prepare-upload"), post(prepare_upload))
         .route(&format!("{API}/upload"), post(upload))
         .route(&format!("{API}/cancel"), post(cancel))
@@ -34,10 +35,20 @@ async fn register(
     ConnectInfo(remote): ConnectInfo<SocketAddr>,
     Json(info): Json<DeviceInfo>,
 ) -> Json<DeviceInfo> {
-    if info.protocol == Scheme::Https {
-        n.see_device(&info, remote.ip());
-    }
+    discovery::verify_claim(&n, &info, remote.ip()).await;
     Json(n.my_info())
+}
+
+async fn info(State(n): State<Arc<Inner>>) -> Json<DeviceInfo> {
+    Json(n.my_info())
+}
+
+// ponytail: failures never decay except on a correct PIN; a time window if real
+// users get locked out.
+const MAX_PIN_FAILURES: u32 = 5;
+
+fn busy(n: &Inner) -> bool {
+    n.session.lock().unwrap().is_some() || !n.pending.lock().unwrap().is_empty()
 }
 
 async fn prepare_upload(
@@ -47,31 +58,43 @@ async fn prepare_upload(
     Json(req): Json<PrepareUploadRequest>,
 ) -> Response {
     if let Some(pin) = &n.cfg.pin {
+        let ip = remote.ip();
+        let failures = n
+            .pin_failures
+            .lock()
+            .unwrap()
+            .get(&ip)
+            .copied()
+            .unwrap_or(0);
+        if failures >= MAX_PIN_FAILURES {
+            return StatusCode::TOO_MANY_REQUESTS.into_response();
+        }
         if q.pin.as_deref() != Some(pin.as_str()) {
+            *n.pin_failures.lock().unwrap().entry(ip).or_default() += 1;
             return StatusCode::UNAUTHORIZED.into_response();
         }
+        n.pin_failures.lock().unwrap().remove(&ip);
     }
-    let Some(from) = n.see_device(&req.info, remote.ip()) else {
+    if req
+        .info
+        .fingerprint
+        .eq_ignore_ascii_case(&n.identity.fingerprint)
+    {
         return StatusCode::BAD_REQUEST.into_response();
-    };
-    if from.trust == TrustLevel::Blocked {
-        return StatusCode::FORBIDDEN.into_response();
     }
-    if n.session.lock().unwrap().is_some() {
+    if busy(&n) {
         return StatusCode::CONFLICT.into_response();
     }
     if req.files.is_empty() {
         return StatusCode::NO_CONTENT.into_response();
     }
     // Prove the sender owns the key it claims: call it back, pinned to that key.
-    let sender_verified = req.info.protocol == Scheme::Https
-        && discovery::register_with(
-            &n,
-            SocketAddr::new(remote.ip(), req.info.port),
-            Some(&req.info.fingerprint),
-        )
-        .await
-        .is_ok();
+    let proven = discovery::verify_claim(&n, &req.info, remote.ip()).await;
+    let sender_verified = proven.is_some();
+    let from = proven.unwrap_or_else(|| n.unverified_device(&req.info, remote.ip()));
+    if from.trust == TrustLevel::Blocked {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let files: Vec<FileMeta> = req.files.into_values().collect();
     let total: u64 = files.iter().map(|f| f.size).sum();
     let auto = sender_verified
@@ -82,10 +105,17 @@ async fn prepare_upload(
     } else {
         let request_id = Uuid::new_v4().to_string();
         let (tx, rx) = oneshot::channel();
-        n.pending
-            .lock()
-            .unwrap()
-            .insert(request_id.clone(), Pending { tx, total });
+        {
+            // Re-check: another request may have arrived during verification.
+            if n.session.lock().unwrap().is_some() {
+                return StatusCode::CONFLICT.into_response();
+            }
+            let mut pending = n.pending.lock().unwrap();
+            if !pending.is_empty() {
+                return StatusCode::CONFLICT.into_response();
+            }
+            pending.insert(request_id.clone(), Pending { tx, total });
+        }
         n.emit(Event::IncomingRequest {
             request: IncomingRequest {
                 request_id: request_id.clone(),

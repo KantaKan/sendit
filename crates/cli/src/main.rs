@@ -159,7 +159,7 @@ fn print_devices(devices: &[Device]) {
     for d in devices {
         println!(
             "{:<24} {:<9} {:<22} {:?}",
-            d.alias,
+            clean(&d.alias),
             &d.fingerprint[..8.min(d.fingerprint.len())],
             d.addr,
             d.trust
@@ -197,7 +197,7 @@ async fn send(
         if !trust_new_key {
             return Err(format!(
                 "{} is using a different key than before. If it was reinstalled, rerun with --trust-new-key",
-                device.alias
+                clean(&device.alias)
             )
             .into());
         }
@@ -226,12 +226,12 @@ async fn send(
             }
         }
     });
-    eprintln!("waiting for {} to accept...", device.alias);
+    eprintln!("waiting for {} to accept...", clean(&device.alias));
     let result = node.send(&device.fingerprint, paths, pin).await;
     progress.abort();
     eprintln!();
     result?;
-    println!("sent to {}", device.alias);
+    println!("sent to {}", clean(&device.alias));
     Ok(())
 }
 
@@ -258,12 +258,12 @@ async fn receive(node: &Node, yes: bool) -> BoxResult<()> {
                     };
                     println!(
                         "{} wants to send {} file(s), {:.1} MB{note}",
-                        request.from.alias,
+                        clean(&request.from.alias),
                         request.files.len(),
                         request.total_size as f64 / 1e6
                     );
                     for f in &request.files {
-                        println!("  {} ({} bytes)", f.file_name, f.size);
+                        println!("  {} ({} bytes)", clean(&f.file_name), f.size);
                     }
                     let accept = yes || ask("accept? [y/N] ").await;
                     let decision = if accept { Decision::Accept { dest: None } } else { Decision::Decline };
@@ -285,6 +285,13 @@ async fn receive(node: &Node, yes: bool) -> BoxResult<()> {
             }
         }
     }
+}
+
+/// Peer-chosen text made safe to print: no terminal escape sequences.
+fn clean(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { '?' } else { c })
+        .collect()
 }
 
 async fn ask(prompt: &str) -> bool {
@@ -313,6 +320,12 @@ mod tests {
             trust: TrustLevel::Known,
             is_sendit: false,
         }
+    }
+
+    #[test]
+    fn clean_strips_terminal_escapes() {
+        assert_eq!(clean("a\x1b[1A\x1b[2Kb\n"), "a?[1A?[2Kb?");
+        assert_eq!(clean("ไฟล์.txt"), "ไฟล์.txt");
     }
 
     #[test]

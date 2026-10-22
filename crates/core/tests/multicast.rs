@@ -7,12 +7,14 @@ use sendit_core::Event;
 async fn peers_find_each_other_by_multicast() {
     let mport = 53399;
     let a = peer_with("alice", |c| {
+        c.bind = std::net::Ipv4Addr::UNSPECIFIED;
         c.multicast = true;
         c.multicast_port = mport;
     })
     .await;
     let mut rx = a.node.subscribe();
     let _b = peer_with("bob", |c| {
+        c.bind = std::net::Ipv4Addr::UNSPECIFIED;
         c.multicast = true;
         c.multicast_port = mport;
     })
