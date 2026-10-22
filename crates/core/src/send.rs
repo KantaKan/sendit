@@ -51,6 +51,7 @@ pub(crate) async fn send(
         peer: device.fingerprint.clone(),
         files: files.iter().map(|(m, _)| m.clone()).collect(),
         total,
+        sources: paths.clone(),
     });
     let meter = Meter::new(n.events.clone(), id.clone(), Direction::Outgoing, total);
     let result = run(n, &device, files, pin, &meter, &cancel).await;

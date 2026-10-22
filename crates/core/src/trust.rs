@@ -23,6 +23,15 @@ pub enum Observation {
     IdentityChanged { old_fingerprint: String },
 }
 
+/// A device we have a record for, whether or not it is nearby right now.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnownDevice {
+    pub fingerprint: String,
+    pub alias: String,
+    pub trust: TrustLevel,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Record {
     alias: String,
@@ -117,6 +126,20 @@ impl TrustStore {
             }
             level => level,
         }
+    }
+
+    pub fn known(&self) -> Vec<KnownDevice> {
+        let mut v: Vec<KnownDevice> = self
+            .records
+            .iter()
+            .map(|(fp, r)| KnownDevice {
+                fingerprint: fp.clone(),
+                alias: r.alias.clone(),
+                trust: self.level(fp),
+            })
+            .collect();
+        v.sort_by_key(|d| d.alias.to_lowercase());
+        v
     }
 
     pub fn auto_accept(&self, fp: &str) -> bool {
@@ -252,5 +275,19 @@ mod tests {
         let path = dir.path().join("trust.json");
         std::fs::write(&path, "{not json").unwrap();
         assert_eq!(TrustStore::load(path).level("AA"), TrustLevel::New);
+    }
+
+    #[test]
+    fn known_lists_records_with_levels() {
+        let mut t = TrustStore::in_memory();
+        t.observe("BB", "zed");
+        t.observe("AA", "Amy");
+        t.set_verified("AA", true);
+        let k = t.known();
+        assert_eq!(
+            k.iter().map(|d| d.alias.as_str()).collect::<Vec<_>>(),
+            ["Amy", "zed"]
+        );
+        assert_eq!(k[0].trust, TrustLevel::Verified);
     }
 }

@@ -104,6 +104,8 @@ pub enum Event {
         peer: String,
         files: Vec<FileMeta>,
         total: u64,
+        /// Local paths being sent (outgoing only), so a UI can offer Retry.
+        sources: Vec<PathBuf>,
     },
     Progress {
         transfer_id: String,
@@ -234,5 +236,48 @@ mod tests {
     fn io_storage_full_maps_to_disk_full() {
         let e = std::io::Error::from(std::io::ErrorKind::StorageFull);
         assert_eq!(FailReason::from(e), FailReason::DiskFull);
+    }
+
+    #[test]
+    fn event_json_matches_frontend_contract() {
+        let d = Device {
+            fingerprint: "AB".into(),
+            alias: "x".into(),
+            device_model: None,
+            device_type: Some("mobile".into()),
+            addr: "10.0.0.2:53317".parse().unwrap(),
+            trust: TrustLevel::Known,
+            is_sendit: false,
+        };
+        let v = serde_json::to_value(Event::DeviceUpdated { device: d }).unwrap();
+        assert_eq!(v["type"], "deviceUpdated");
+        assert_eq!(v["device"]["isSendit"], false);
+        assert_eq!(v["device"]["deviceModel"], serde_json::Value::Null);
+        assert_eq!(v["device"]["addr"], "10.0.0.2:53317");
+        assert_eq!(v["device"]["trust"], "known");
+        let v = serde_json::to_value(Event::TransferFailed {
+            transfer_id: "t".into(),
+            direction: Direction::Outgoing,
+            reason: FailReason::PeerGone,
+        })
+        .unwrap();
+        assert_eq!(v["transferId"], "t");
+        assert_eq!(v["direction"], "outgoing");
+        assert_eq!(v["reason"]["kind"], "peerGone");
+        let v = serde_json::to_value(FailReason::Protocol("x".into())).unwrap();
+        assert_eq!(
+            (v["kind"].as_str(), v["detail"].as_str()),
+            (Some("protocol"), Some("x"))
+        );
+        let v = serde_json::to_value(Event::TransferStarted {
+            transfer_id: "t".into(),
+            direction: Direction::Outgoing,
+            peer: "AB".into(),
+            files: vec![],
+            total: 3,
+            sources: vec!["/a".into()],
+        })
+        .unwrap();
+        assert_eq!(v["sources"][0], "/a");
     }
 }

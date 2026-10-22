@@ -142,3 +142,21 @@ async fn unknown_device_errors() {
     let err = a.node.send("ABCDEF", vec![], None).await.unwrap_err();
     assert!(matches!(err, Error::UnknownDevice(_)));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn started_event_carries_sources() {
+    let (a, b) = pair().await;
+    auto_accept(&b.node);
+    let mut rx = a.node.subscribe();
+    let src = write_file(a.dir.path(), "s.txt", 3);
+    a.node
+        .send(b.node.fingerprint(), vec![src.clone()], None)
+        .await
+        .unwrap();
+    let Event::TransferStarted { sources, .. } =
+        wait_for(&mut rx, |e| matches!(e, Event::TransferStarted { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(sources, vec![src]);
+}

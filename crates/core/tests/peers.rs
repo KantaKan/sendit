@@ -60,3 +60,14 @@ async fn busy_port_falls_back() {
     assert!(node.port_fallback());
     assert_ne!(node.port(), taken);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn known_devices_survive_in_trust_store() {
+    let a = peer("alice").await;
+    let b = peer("bob").await;
+    a.node.add_peer(b.addr()).await.unwrap();
+    let k = a.node.known_devices();
+    assert_eq!(k.len(), 1);
+    assert_eq!(k[0].alias, "bob");
+    assert!(a.node.download_dir().ends_with("down"));
+}

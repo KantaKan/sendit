@@ -111,6 +111,7 @@ impl Inner {
             peer: from.fingerprint,
             files,
             total,
+            sources: vec![],
         });
         let n = self.clone();
         let (idle, sid) = (self.cfg.idle_timeout, id.clone());

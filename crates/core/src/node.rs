@@ -12,7 +12,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -345,6 +345,15 @@ impl Node {
     /// Slow fallback for networks that block multicast.
     pub async fn scan(&self) -> Vec<Device> {
         discovery::scan(&self.inner).await
+    }
+
+    /// Every device in the trust store (for "seen before").
+    pub fn known_devices(&self) -> Vec<crate::trust::KnownDevice> {
+        self.inner.trust.lock().unwrap().known()
+    }
+
+    pub fn download_dir(&self) -> &Path {
+        &self.inner.cfg.download_dir
     }
 
     pub fn shutdown(&self) {
