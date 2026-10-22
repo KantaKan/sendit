@@ -180,6 +180,10 @@ impl Node {
                 tracing::error!("https server stopped: {e}");
             }
         });
+        if inner.cfg.multicast {
+            discovery::spawn_listener(inner.clone())?;
+            discovery::send_announcement(&inner, true);
+        }
         Ok(Node {
             inner,
             handle,
@@ -300,6 +304,16 @@ impl Node {
             return true;
         }
         self.inner.fail_incoming(transfer_id, FailReason::Cancelled)
+    }
+
+    /// Shout "I'm here" on the LAN. Peers answer via /register.
+    pub fn announce(&self) {
+        discovery::send_announcement(&self.inner, true);
+    }
+
+    /// Slow fallback for networks that block multicast.
+    pub async fn scan(&self) -> Vec<Device> {
+        discovery::scan(&self.inner).await
     }
 
     pub fn shutdown(&self) {
