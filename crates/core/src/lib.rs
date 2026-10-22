@@ -2,6 +2,7 @@ pub mod error;
 pub mod identity;
 pub mod protocol;
 pub mod sanitize;
+pub mod tls;
 
 // Replaced by the real events module in Task 6.
 pub mod events {
