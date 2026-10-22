@@ -49,10 +49,11 @@ async fn same_alias_with_new_key_is_suspect() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn busy_port_falls_back() {
-    let blocker = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+    let blocker = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let taken = blocker.local_addr().unwrap().port();
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = Config::new("x", dir.path().join("d"), dir.path().join("down"));
+    cfg.bind = std::net::Ipv4Addr::LOCALHOST;
     cfg.port = taken;
     cfg.multicast = false;
     let node = Node::start(cfg).await.unwrap();

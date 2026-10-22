@@ -22,6 +22,9 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone, Debug)]
 pub struct Config {
     pub alias: String,
+    /// Interface the HTTPS server listens on. Tests use loopback so Windows
+    /// Firewall doesn't prompt for every rebuilt test binary.
+    pub bind: Ipv4Addr,
     /// TCP port for the HTTPS server. 0 = any free port.
     pub port: u16,
     pub multicast_port: u16,
@@ -43,6 +46,7 @@ impl Config {
     ) -> Self {
         Self {
             alias: alias.into(),
+            bind: Ipv4Addr::UNSPECIFIED,
             port: DEFAULT_PORT,
             multicast_port: DEFAULT_PORT,
             data_dir: data_dir.into(),
@@ -148,10 +152,10 @@ impl Node {
         std::fs::create_dir_all(&cfg.download_dir)?;
         let identity = Identity::load_or_create(&cfg.data_dir.join("identity"))?;
         let trust = TrustStore::load(cfg.data_dir.join("trust.json"));
-        let (listener, port_fallback) = match TcpListener::bind((Ipv4Addr::UNSPECIFIED, cfg.port)) {
+        let (listener, port_fallback) = match TcpListener::bind((cfg.bind, cfg.port)) {
             Ok(l) => (l, false),
             Err(e) if e.kind() == std::io::ErrorKind::AddrInUse && cfg.port != 0 => {
-                (TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0))?, true)
+                (TcpListener::bind((cfg.bind, 0))?, true)
             }
             Err(e) => return Err(e.into()),
         };

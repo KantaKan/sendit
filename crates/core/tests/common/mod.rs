@@ -142,6 +142,7 @@ pub async fn peer(alias: &str) -> Peer {
 pub async fn peer_with(alias: &str, f: impl FnOnce(&mut Config)) -> Peer {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = Config::new(alias, dir.path().join("data"), dir.path().join("down"));
+    cfg.bind = std::net::Ipv4Addr::LOCALHOST;
     cfg.port = 0;
     cfg.multicast = false;
     cfg.request_timeout = Duration::from_secs(5);
@@ -168,4 +169,60 @@ pub async fn wait_for(
     })
     .await
     .expect("timed out waiting for event")
+}
+
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+
+#[derive(Clone, Copy)]
+pub enum Chaos {
+    /// Drop the connection after this many client->server bytes.
+    Cut(u64),
+    /// Forward client->server at this many bytes per second.
+    Throttle(u64),
+    /// Stop forwarding (but keep the socket open) after this many bytes.
+    Stall(u64),
+}
+
+pub async fn proxy(target: SocketAddr, mode: Chaos) -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((inbound, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let Ok(outbound) = TcpStream::connect(target).await else {
+                    return;
+                };
+                let (mut ir, mut iw) = inbound.into_split();
+                let (mut or, mut ow) = outbound.into_split();
+                let up = async {
+                    let mut buf = [0u8; 16 * 1024];
+                    let mut total = 0u64;
+                    loop {
+                        let n = ir.read(&mut buf).await?;
+                        if n == 0 {
+                            return Ok::<_, std::io::Error>(());
+                        }
+                        total += n as u64;
+                        match mode {
+                            Chaos::Cut(limit) if total > limit => return Ok(()),
+                            Chaos::Stall(limit) if total > limit => {
+                                std::future::pending::<()>().await
+                            }
+                            Chaos::Throttle(bps) => {
+                                tokio::time::sleep(Duration::from_millis(n as u64 * 1000 / bps))
+                                    .await
+                            }
+                            _ => {}
+                        }
+                        ow.write_all(&buf[..n]).await?;
+                    }
+                };
+                let down = tokio::io::copy(&mut or, &mut iw);
+                // Whichever side ends first tears down both sockets.
+                tokio::select! { _ = up => {}, _ = down => {} }
+            });
+        }
+    });
+    addr
 }
