@@ -1,14 +1,10 @@
 pub mod error;
+pub mod events;
 pub mod identity;
 pub mod protocol;
 pub mod sanitize;
 pub mod tls;
 pub mod trust;
 
-// Replaced by the real events module in Task 6.
-pub mod events {
-    #[derive(Clone, Debug, PartialEq)]
-    pub enum FailReason {}
-}
-
 pub use error::{Error, Result};
+pub use events::{Device, Direction, Event, FailReason, IncomingRequest};
