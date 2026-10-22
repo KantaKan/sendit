@@ -8,13 +8,20 @@ LocalSend-compatible file transfer for Windows, macOS and Linux. It talks to the
     sendit send photo.jpg album/ --to "Pixel 8"
     sendit receive
 
+## App
+
+    cd app
+    npm install
+    npm run tauri dev        # run the desktop app
+    npm run dev:mock         # UI only, in a browser, with a fake backend
+
 ## Build
 
     cargo build --release
 
 ## Why another LocalSend client?
 
-- New desktop UI (coming in the app)
+- A desktop app where every transfer is a ticket in a chat with that device
 - Trust on first use: a device that reuses a known name with a new key is blocked until you confirm it
 - A scriptable CLI
 
