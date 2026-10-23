@@ -67,7 +67,9 @@ export function createMockBridge(seed: Seed = {}) {
     pickFiles: async () => seed.pickedFiles ?? [],
     pickFolder: async () => seed.pickedFolder ?? null,
     reveal: async (p) => rec('reveal', p),
-    fileUrl: (p) => `mock-file://${p}`,
+    // A real (tiny) image so thumbnails and previews render in dev:mock and e2e.
+    fileUrl: (p) =>
+      `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='440' height='300'><rect width='100%' height='100%' fill='#3d6b5a'/><text x='20' y='40' fill='white'>${p.split(/[\/]/).pop()}</text></svg>`)}`,
     notify: (t, b) => rec('notify', t, b),
     paste: async (fp) => {
       rec('paste', fp);

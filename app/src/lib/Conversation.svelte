@@ -27,6 +27,19 @@
   let skipped = $state(new Set<string>());
 
   const sec = $derived(sections(tickets));
+  const PEEK_W = 220;
+  const PEEK_H = 150;
+  let peek = $state<{ src: string; left: number; top: number } | null>(null);
+  function showPeek(src: string | null, at: DOMRect | null) {
+    if (!src || !at) {
+      peek = null;
+      return;
+    }
+    const right = at.right + 12;
+    const left = right + PEEK_W + 8 <= window.innerWidth ? right : Math.max(8, at.left - PEEK_W - 12);
+    const top = Math.min(Math.max(8, at.top + at.height / 2 - PEEK_H / 2), window.innerHeight - PEEK_H - 8);
+    peek = { src, left, top };
+  }
   const today = $derived(bytesToday(tickets, Date.now()));
   // Thumbnails for single images: our source when sending, the saved file when received.
   function thumbFor(t: Ticket): string | null {
@@ -85,12 +98,15 @@
         <p class="label">Earlier</p>
         <div class="rows">
           {#each sec.history as t (t.key)}
-            <HistoryRow ticket={t} thumb={thumbFor(t)} onretry={() => store.retry(t)} onreveal={store.reveal} />
+            <HistoryRow ticket={t} thumb={thumbFor(t)} onretry={() => store.retry(t)} onreveal={store.reveal} onpeek={showPeek} />
           {/each}
         </div>
       {/if}
     {/if}
   </div>
+  {#if peek}
+    <img class="peek" data-testid="peek" src={peek.src} alt="" style:left="{peek.left}px" style:top="{peek.top}px" />
+  {/if}
   <footer class="mono">
     {#if store.notice}
       <span class="notice" role="status">{store.notice}</span>
@@ -112,7 +128,9 @@
   .live { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: ping 1.6s infinite; }
   @keyframes ping { 0% { box-shadow: 0 0 0 0 #3ecf8e88; } 70%, 100% { box-shadow: 0 0 0 7px #3ecf8e00; } }
   .rows { display: flex; flex-direction: column; }
-  .list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
+  .peek { position: fixed; z-index: 50; width: 220px; height: 150px; border-radius: 14px; object-fit: cover; box-shadow: 0 18px 40px #000a; pointer-events: none; animation: peek 0.18s ease-out; }
+  @keyframes peek { from { opacity: 0; transform: scale(0.96); } }
+  .list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px;  overflow-x: hidden; }
   footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 12px; }
   .zone { margin: auto; width: min(360px, 100%); padding: 40px 22px; border: 1px dashed #ffffff1f; border-radius: 16px; text-align: center; color: var(--muted); font-size: 14px; transition: border-color 0.2s, color 0.2s, background 0.2s; }
   .zone.hot { border-color: var(--accent); color: var(--text); background: #3ecf8e0d; }

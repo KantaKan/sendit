@@ -91,17 +91,10 @@
   .me { position: absolute; left: 50%; top: 50%; width: 84px; height: 84px; margin: -42px; border-radius: 26px; box-shadow: 0 0 0 8px var(--bg); background: var(--surface); }
   .content { position: relative; display: flex; flex-direction: column; gap: 20px; padding: 0 56px; max-width: 540px; }
   h2 { margin: 0; font-size: 40px; line-height: 1.04; letter-spacing: -0.04em; }
-  .pass {
-    --cut: 120px;
-    display: grid; grid-template-columns: 1fr var(--cut); background: var(--surface-2); border-radius: 16px; overflow: hidden;
-    -webkit-mask: radial-gradient(circle 9px at calc(100% - var(--cut)) 0, #0000 98%, #000) top/100% 51% no-repeat,
-      radial-gradient(circle 9px at calc(100% - var(--cut)) 100%, #0000 98%, #000) bottom/100% 51% no-repeat;
-    mask: radial-gradient(circle 9px at calc(100% - var(--cut)) 0, #0000 98%, #000) top/100% 51% no-repeat,
-      radial-gradient(circle 9px at calc(100% - var(--cut)) 100%, #0000 98%, #000) bottom/100% 51% no-repeat;
-  }
+  .pass { display: grid; grid-template-columns: 1fr auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
   .pass .l { padding: 16px 18px; display: flex; flex-direction: column; min-width: 0; }
   .pass .l b { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pass .r { border-left: 1.5px dashed #ffffff22; display: flex; flex-direction: column; justify-content: center; padding: 0 16px; gap: 4px; }
+  .pass .r { border-left: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; padding: 0 16px; gap: 4px; }
   .meta { font-size: 11.5px; color: var(--faint); }
   .live { color: var(--accent); font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
   .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: blink 1.6s ease-in-out infinite; }

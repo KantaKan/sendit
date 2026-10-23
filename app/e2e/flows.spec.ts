@@ -90,3 +90,43 @@ test('Ctrl+V pastes to the open conversation', async ({ page }) => {
   await expect.poll(() => calls(page, 'paste')).toHaveLength(1);
   expect(await calls(page, 'paste')).toEqual([{ name: 'paste', args: [PIXEL.fingerprint] }]);
 });
+
+async function history(page: Page) {
+  await boot(page, { devices: [PIXEL] });
+  await page.getByRole('button', { name: /Pixel 8/ }).click();
+  for (const [i, name] of ['a.jpg', 'b.jpg', 'c.pdf', 'd.jpg'].entries()) {
+    const id = `t${i}`;
+    const out = i % 2 === 0;
+    await emit(page, { type: 'transferStarted', transferId: id, requestId: null, direction: out ? 'outgoing' : 'incoming', peer: PIXEL.fingerprint,
+      files: [{ id, fileName: name, size: 1000, fileType: '' }], total: 1000, sources: out ? [`C:\${name}`] : [] });
+    await emit(page, { type: 'transferDone', transferId: id, direction: out ? 'outgoing' : 'incoming', paths: out ? [] : [`C:\d\${name}`] });
+  }
+  await page.waitForTimeout(700); // let entry animations finish
+}
+
+test('the timeline never scrolls sideways', async ({ page }) => {
+  await history(page);
+  const overflow = await page.evaluate(() => {
+    const el = document.querySelector('.list')!;
+    return el.scrollWidth - el.clientWidth;
+  });
+  expect(overflow).toBe(0);
+});
+
+test('hovering the top thumbnail shows its preview fully, on top of everything', async ({ page }) => {
+  await history(page);
+  await page.locator('.row img.tile').first().hover();
+  const peek = page.getByTestId('peek');
+  await expect(peek).toBeVisible();
+  const box = (await peek.boundingBox())!;
+  const vp = page.viewportSize()!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(vp.height);
+  // The preview ignores the mouse (pointer-events: none); allow hits just for this check.
+  const topmost = await page.evaluate(([x, y]) => {
+    (document.querySelector('[data-testid=peek]') as HTMLElement).style.pointerEvents = 'auto';
+    return document.elementFromPoint(x, y)?.getAttribute('data-testid');
+  }, [box.x + 10, box.y + 10]);
+  expect(topmost).toBe('peek');
+});
+

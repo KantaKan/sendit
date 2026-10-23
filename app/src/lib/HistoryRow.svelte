@@ -4,8 +4,15 @@
   import type { Ticket } from './state';
 
   let {
-    ticket, thumb, onretry, onreveal,
-  }: { ticket: Ticket; thumb: string | null; onretry: () => void; onreveal: (path: string) => void } = $props();
+    ticket, thumb, onretry, onreveal, onpeek = () => {},
+  }: {
+    ticket: Ticket;
+    thumb: string | null;
+    onretry: () => void;
+    onreveal: (path: string) => void;
+    /** hover preview: the image and where its thumbnail sits, or null to hide */
+    onpeek?: (src: string | null, at: DOMRect | null) => void;
+  } = $props();
 
   const isMessage = $derived(ticket.text !== undefined);
   const out = $derived(ticket.direction === 'outgoing');
@@ -40,8 +47,14 @@
   {#if isMessage}
     <div class="tile quote" aria-hidden="true">“</div>
   {:else if thumb && !broken}
-    <img class="tile" src={thumb} alt="" onerror={() => (broken = true)} />
-    <img class="peek" src={thumb} alt="" aria-hidden="true" />
+    <img
+      class="tile"
+      src={thumb}
+      alt=""
+      onerror={() => (broken = true)}
+      onmouseenter={(e) => onpeek(thumb, e.currentTarget.getBoundingClientRect())}
+      onmouseleave={() => onpeek(null, null)}
+    />
   {:else}
     <div class="tile">{extLabel(ticket.files[0]?.fileName ?? '')}</div>
   {/if}
@@ -66,15 +79,13 @@
 </div>
 
 <style>
-  .row { position: relative; display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center; padding: 9px 8px; margin: 0 -8px; border-radius: 12px; transition: background 0.15s; animation: from-right 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+  .row { position: relative; display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center; padding: 9px 8px; border-radius: 12px; transition: background 0.15s; animation: from-right 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
   .row.in { animation-name: from-left; }
   .row:hover, .row:focus-within { background: var(--surface); }
   .tile { width: 44px; height: 44px; border-radius: 11px; object-fit: cover; display: grid; place-items: center; background: #2a2a30; font: 600 10.5px var(--mono); color: var(--muted); }
   .quote { font: 20px var(--sans); }
   .muted .tile { opacity: 0.6; }
   .flash { position: absolute; left: 8px; top: 9px; width: 44px; height: 44px; border-radius: 11px; display: grid; place-items: center; background: #3ecf8ecc; color: var(--accent-ink); font-weight: 700; animation: flash 1.2s ease-out forwards; pointer-events: none; }
-  .peek { position: absolute; left: 60px; bottom: 52px; width: 220px; height: 150px; border-radius: 14px; object-fit: cover; box-shadow: 0 18px 40px #000a; opacity: 0; transform: translateY(6px) scale(0.96); transition: opacity 0.2s, transform 0.2s; pointer-events: none; z-index: 2; }
-  .row:hover .peek { opacity: 1; transform: none; }
   .text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .text b { font-weight: 500; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { font-size: 12.5px; color: var(--muted); }
