@@ -1,4 +1,5 @@
 import type { Bridge } from './bridge';
+import { clearFinished, restore, toSaved } from './history';
 import {
   apply, initial, markAccepting, removeTicket, markDeclined, markExpired, markPending, type State, type Ticket,
 } from './state';
@@ -18,6 +19,30 @@ export function createStore(bridge: Bridge) {
     clearTimeout(noticeTimer);
     noticeTimer = setTimeout(() => (notice = null), 2500);
   };
+  // History is saved at most once a second, and only after the saved copy has
+  // loaded, so a slow load can never be overwritten by a near-empty list.
+  let historyLoaded = false;
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastSaved = '';
+  let saveFailed = false;
+  function persist() {
+    if (!historyLoaded || saveTimer) return;
+    saveTimer = setTimeout(() => {
+      saveTimer = undefined;
+      const items = toSaved($state.snapshot(state.tickets) as Ticket[]);
+      const json = JSON.stringify(items);
+      if (json === lastSaved) return;
+      lastSaved = json;
+      bridge.saveHistory(items).catch((e) => {
+        lastSaved = '';
+        if (!saveFailed) {
+          saveFailed = true;
+          error = `Could not save history: ${e}`;
+        }
+      });
+    }, 1000);
+  }
+  // ponytail: a quit within 1 s of the last change loses that change; flush on exit if it bites.
   const fail = (e: unknown) => {
     error = String(e);
   };
@@ -32,6 +57,7 @@ export function createStore(bridge: Bridge) {
 
   function onEvent(e: CoreEvent) {
     state = apply(state, e, Date.now());
+    persist();
     if (e.type === 'incomingRequest') {
       selected ??= e.request.from.fingerprint;
       if (!document.hasFocus()) {
@@ -98,6 +124,16 @@ export function createStore(bridge: Bridge) {
           fail(e);
         }
       })();
+      bridge
+        .loadHistory()
+        .then((saved) => {
+          state = restore(state, saved);
+          lastSaved = JSON.stringify(toSaved(saved));
+          historyLoaded = true;
+          persist();
+        })
+        // Never enable saving after a failed load: that would overwrite the file.
+        .catch((e) => fail(`Could not load history: ${e}`));
       return () => {
         offEvent();
         offDrag();
@@ -127,6 +163,7 @@ export function createStore(bridge: Bridge) {
     },
     decline(requestId: string) {
       state = markDeclined(state, requestId);
+      persist();
       bridge.respond(requestId, false).catch(() => {});
     },
     cancel(transferId: string) { bridge.cancel(transferId).catch(fail); },
@@ -137,6 +174,7 @@ export function createStore(bridge: Bridge) {
     fileUrl: (path: string) => bridge.fileUrl(path),
     removeTicket(key: string) {
       state = removeTicket(state, key);
+      persist();
     },
     reveal(path: string) { bridge.reveal(path).catch(fail); },
     refresh() {
@@ -163,6 +201,10 @@ export function createStore(bridge: Bridge) {
     trustNewKey(fp: string) { bridge.trustNewKey(fp).catch(fail); },
     block(fp: string) { bridge.block(fp).catch(fail); },
     dismissError() { error = null; },
+    clearHistory() {
+      state = clearFinished(state);
+      persist();
+    },
   };
 }
 

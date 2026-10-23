@@ -53,6 +53,8 @@ function patch(s: State, pick: (t: Ticket) => boolean, change: (t: Ticket) => Pa
 const byTransfer = (id: string) => (t: Ticket) => t.transferId === id;
 const byRequest = (id: string) => (t: Ticket) => t.requestId === id;
 
+let seq = 0;
+
 export function apply(s: State, e: CoreEvent, now: number): State {
   switch (e.type) {
     case 'deviceUpdated': {
@@ -110,7 +112,7 @@ export function apply(s: State, e: CoreEvent, now: number): State {
     case 'messageReceived': {
       const devices = s.devices[e.from.fingerprint] ? s.devices : { ...s.devices, [e.from.fingerprint]: e.from };
       const ticket: Ticket = {
-        key: `msg:${s.tickets.length}`,
+        key: `msg:${now}:${seq++}`,
         peer: e.from.fingerprint,
         direction: 'incoming',
         files: [],

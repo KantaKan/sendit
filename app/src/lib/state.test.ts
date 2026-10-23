@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { device, file } from './fixtures';
 import {
-  apply, initial, markAccepting, markDeclined, markExpired, markPending, nearby, seenBefore, ticketsFor,
+  apply, initial, markAccepting, markDeclined, markExpired, markPending, nearby, seenBefore, ticketsFor, type Ticket,
 } from './state';
 import type { CoreEvent } from './types';
 
@@ -199,4 +199,16 @@ test('removeTicket drops one item from the history', () => {
   s = apply(s, started('outgoing', 'b'), 1);
   s = removeTicket(s, 'a');
   expect(ticketsFor(s, PIXEL.fingerprint).map((t) => t.transferId)).toEqual(['b']);
+});
+
+test('message keys stay unique next to restored items', () => {
+  let s = { ...initial(), tickets: [] as Ticket[] };
+  s = apply(s, { type: 'messageReceived', from: device(), text: 'a', senderVerified: true }, 1000);
+  // a restored item from an earlier run that used the old key scheme
+  s = { ...s, tickets: [{ ...s.tickets[0], key: 'msg:1' }, ...s.tickets] };
+  s = apply(s, { type: 'messageReceived', from: device(), text: 'b', senderVerified: true }, 1000);
+  s = removeTicket(s, s.tickets[0].key);
+  s = apply(s, { type: 'messageReceived', from: device(), text: 'c', senderVerified: true }, 1000);
+  const keys = s.tickets.map((x) => x.key);
+  expect(new Set(keys).size).toBe(keys.length);
 });
