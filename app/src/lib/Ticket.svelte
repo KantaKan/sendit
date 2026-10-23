@@ -4,10 +4,11 @@
   import type { Ticket } from './state';
 
   let {
-    ticket, destLabel, onaccept, ondecline, onelsewhere, oncancel, onretry, onreveal,
+    ticket, destLabel, peerAlias = 'them', onaccept, ondecline, onelsewhere, oncancel, onretry, onreveal,
   }: {
     ticket: Ticket;
     destLabel: string;
+    peerAlias?: string;
     onaccept: () => void;
     ondecline: () => void;
     onelsewhere: () => void;
@@ -28,6 +29,7 @@
   const pct = $derived(percent(ticket.bytes, ticket.total));
   const speed = $derived(ticket.bytes / Math.max(0.5, (Date.now() - ticket.at) / 1000));
   const meta = $derived.by(() => {
+    if (ticket.status === 'live' && out && ticket.bytes === 0) return `Waiting for ${peerAlias} to accept`;
     if (ticket.status === 'live') return `${formatBytes(ticket.bytes)} / ${formatBytes(ticket.total)}  ${formatBytes(speed)}/s`;
     if (ticket.status === 'done') return `${formatBytes(ticket.total)}  ${out ? 'sent' : 'received'} ${clock(ticket.at)}`;
     return formatBytes(ticket.total);
@@ -59,13 +61,19 @@
       <button class="dest mono" onclick={onelsewhere} disabled={ticket.status === 'accepting'} title="Save to another folder">to {destLabel}</button>
     </div>
   </article>
-{:else if ticket.status === 'message'}
+{:else if ticket.text !== undefined}
   <div class="row" class:out>
-    <article class="message" class:out aria-label="Message">
+    <article class="message" class:out class:sending={ticket.status === 'sending'} aria-label="Message">
       <p class="text">{ticket.text}</p>
-      <p class="mono meta">{clock(ticket.at)}{out || ticket.senderVerified ? '' : '  unverified sender'}</p>
+      <p class="mono meta">
+        {ticket.status === 'sending' ? 'Sending…' : clock(ticket.at)}{out || ticket.senderVerified ? '' : '  unverified sender'}
+      </p>
     </article>
-    <div class="under"><button class="link" onclick={copy}>{copied ? 'Copied' : 'Copy'}</button></div>
+    {#if ticket.status === 'failed' && ticket.reason}<p class="reason">{reasonText(ticket.reason)}</p>{/if}
+    <div class="under">
+      {#if ticket.status === 'failed' && out}<button class="link" onclick={onretry}>Retry</button>{/if}
+      <button class="link" onclick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+    </div>
   </div>
 {:else}
   <div class="row" class:out>
@@ -138,6 +146,7 @@
   .message .meta { margin: 6px 0 0; }
   .message.out { background: var(--accent); color: var(--accent-ink); border-radius: 14px 14px 4px 14px; }
   .message.out .meta { color: #0d1f16aa; }
+  .row:has(.reason) .message, .message.sending { opacity: 0.7; }
   .reason { margin: 0; font-size: 12px; color: var(--danger-text); }
   .under { display: flex; gap: 12px; }
   .link { background: none; border: 0; padding: 0; font-size: 12px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }

@@ -42,6 +42,7 @@ export function createMockBridge(seed: Seed = {}) {
     devices: async () => seed.devices ?? [],
     knownDevices: async () => seed.known ?? [],
     sendFiles: async (fp, paths) => rec('sendFiles', fp, paths),
+    sendText: async (fp, text) => rec('sendText', fp, text),
     respond: async (id, accept, dest) => {
       rec('respond', id, accept, dest ?? null);
       if (seed.respondError) throw seed.respondError;

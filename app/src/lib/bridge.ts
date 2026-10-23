@@ -8,6 +8,7 @@ export interface Bridge {
   devices(): Promise<Device[]>;
   knownDevices(): Promise<KnownDevice[]>;
   sendFiles(fingerprint: string, paths: string[]): Promise<void>;
+  sendText(fingerprint: string, text: string): Promise<void>;
   respond(requestId: string, accept: boolean, dest?: string): Promise<void>;
   cancel(transferId: string): Promise<boolean>;
   announce(): Promise<void>;

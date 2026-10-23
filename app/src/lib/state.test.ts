@@ -142,7 +142,15 @@ describe('messages', () => {
   });
 });
 
-test('a sent message becomes an outgoing message ticket', () => {
-  const s = apply(initial(), { type: 'messageSent', peer: PIXEL.fingerprint, text: 'yo' }, 9);
-  expect(ticketsFor(s, PIXEL.fingerprint)[0]).toMatchObject({ status: 'message', direction: 'outgoing', text: 'yo', at: 9 });
+test('an outgoing message shows at once as sending, then sent', () => {
+  let s = apply(initial(), { type: 'messageSending', id: 'm1', peer: PIXEL.fingerprint, text: 'yo' }, 9);
+  expect(ticketsFor(s, PIXEL.fingerprint)[0]).toMatchObject({ status: 'sending', direction: 'outgoing', text: 'yo', at: 9 });
+  s = apply(s, { type: 'messageSent', id: 'm1' }, 10);
+  expect(ticketsFor(s, PIXEL.fingerprint)[0]).toMatchObject({ status: 'message', text: 'yo' });
+});
+
+test('a failed message keeps its text and the reason', () => {
+  let s = apply(initial(), { type: 'messageSending', id: 'm1', peer: PIXEL.fingerprint, text: 'yo' }, 9);
+  s = apply(s, { type: 'messageFailed', id: 'm1', reason: { kind: 'peerGone' } }, 10);
+  expect(ticketsFor(s, PIXEL.fingerprint)[0]).toMatchObject({ status: 'failed', text: 'yo', reason: { kind: 'peerGone' } });
 });

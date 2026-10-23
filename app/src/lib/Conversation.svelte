@@ -61,6 +61,7 @@
       <TicketView
         ticket={t}
         {destLabel}
+        peerAlias={device.alias}
         onaccept={() => t.requestId && store.accept(t.requestId)}
         ondecline={() => t.requestId && store.decline(t.requestId)}
         onelsewhere={() => t.requestId && store.acceptElsewhere(t.requestId)}
@@ -73,7 +74,11 @@
     {/each}
   </div>
   <footer class="mono">
-    <span>drop or <kbd>{mod}</kbd> <kbd>V</kbd> to send files, screenshots or text</span>
+    {#if store.notice}
+      <span class="notice" role="status">{store.notice}</span>
+    {:else}
+      <span>drop or <kbd>{mod}</kbd> <kbd>V</kbd> to send files, screenshots or text</span>
+    {/if}
     <button onclick={store.chooseFiles}>Choose files</button>
   </footer>
 </section>
@@ -88,6 +93,7 @@
   .zone { margin: auto; width: min(360px, 100%); padding: 40px 22px; border: 1px dashed #ffffff1f; border-radius: 16px; text-align: center; color: var(--muted); font-size: 14px; transition: border-color 0.2s, color 0.2s, background 0.2s; }
   .zone.hot { border-color: var(--accent); color: var(--text); background: #3ecf8e0d; }
   kbd { font: 11px var(--mono); background: var(--surface-2); color: var(--text); border: 1px solid #3a3a40; border-bottom-width: 2px; border-radius: 6px; padding: 2px 7px; margin: 0 1px; }
+  .notice { color: var(--text); }
   footer kbd { font-size: 10.5px; padding: 1px 6px; color: var(--muted); }
   footer button { background: var(--surface); border: 0; border-radius: 8px; padding: 6px 12px; color: var(--text); font-size: 12px; }
 </style>

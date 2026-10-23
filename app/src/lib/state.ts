@@ -1,7 +1,7 @@
 import type { CoreEvent, Device, Direction, FailReason, FileMeta, KnownDevice } from './types';
 
 export type TicketStatus =
-  | 'pending' | 'accepting' | 'live' | 'done' | 'failed' | 'declined' | 'cancelled' | 'expired' | 'message';
+  | 'pending' | 'accepting' | 'live' | 'done' | 'failed' | 'declined' | 'cancelled' | 'expired' | 'message' | 'sending';
 
 export interface Ticket {
   key: string;
@@ -18,8 +18,10 @@ export interface Ticket {
   sources: string[];
   senderVerified?: boolean;
   fitsOnDisk?: boolean;
-  /** text of a LocalSend text message (status 'message') */
+  /** text of a LocalSend text message */
   text?: string;
+  /** id of an outgoing message (MessageSending/Sent/Failed) */
+  messageId?: string;
   /** ms timestamp the ticket appeared */
   at: number;
 }
@@ -117,15 +119,16 @@ export function apply(s: State, e: CoreEvent, now: number): State {
       };
       return { ...s, devices, tickets: [...s.tickets, ticket] };
     }
-    case 'messageSent': {
+    case 'messageSending': {
       const ticket: Ticket = {
-        key: `msg:${s.tickets.length}`,
+        key: `msg:${e.id}`,
+        messageId: e.id,
         peer: e.peer,
         direction: 'outgoing',
         files: [],
         total: 0,
         bytes: 0,
-        status: 'message',
+        status: 'sending',
         paths: [],
         sources: [],
         text: e.text,
@@ -133,6 +136,10 @@ export function apply(s: State, e: CoreEvent, now: number): State {
       };
       return { ...s, tickets: [...s.tickets, ticket] };
     }
+    case 'messageSent':
+      return patch(s, (t) => t.messageId === e.id, () => ({ status: 'message', at: now }));
+    case 'messageFailed':
+      return patch(s, (t) => t.messageId === e.id, () => ({ status: 'failed', reason: e.reason }));
     case 'requestExpired':
       return patch(
         s,

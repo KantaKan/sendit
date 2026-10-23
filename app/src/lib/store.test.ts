@@ -89,27 +89,28 @@ test('paste with no device selected explains and sends nothing', async () => {
   expect(m.calls.filter((c) => c.name === 'paste')).toEqual([]);
 });
 
-test('paste sends to the open conversation and shows what went', async () => {
+test('paste sends to the open conversation without a toast', async () => {
   const { m, store } = await setup({ pasted: { kind: 'files', count: 2, name: 'a.pdf' } });
   store.select(PIXEL.fingerprint);
   await store.paste();
   expect(m.calls).toContainEqual({ name: 'paste', args: [PIXEL.fingerprint] });
-  expect(store.toast).toBe('Pasted 2 files to Pixel 8');
+  expect(store.notice).toBeNull();
 });
 
-test('paste toast wording per kind', async () => {
-  const cases = [
-    [{ kind: 'files', count: 1, name: 'a.pdf' }, 'Pasted a.pdf to Pixel 8'],
-    [{ kind: 'image', name: 's.png' }, 'Pasted a screenshot to Pixel 8'],
-    [{ kind: 'text', preview: 'hello' }, 'Sent "hello" to Pixel 8'],
-    [{ kind: 'empty' }, 'Nothing to paste. Copy a file, image or text first.'],
-  ] as const;
-  for (const [pasted, text] of cases) {
-    const { store } = await setup({ pasted });
-    store.select(PIXEL.fingerprint);
-    await store.paste();
-    expect(store.toast).toBe(text);
-  }
+test('pasting an empty clipboard leaves a short notice', async () => {
+  const { store } = await setup({ pasted: { kind: 'empty' } });
+  store.select(PIXEL.fingerprint);
+  await store.paste();
+  expect(store.notice).toBe('Nothing to paste. Copy a file, image or text first.');
+});
+
+test('retrying a failed message sends the same text again', async () => {
+  const { m, store } = await setup();
+  m.emit({ type: 'messageSending', id: 'm1', peer: PIXEL.fingerprint, text: 'yo' });
+  m.emit({ type: 'messageFailed', id: 'm1', reason: { kind: 'peerGone' } });
+  store.retry(ticketsFor(store.state, PIXEL.fingerprint)[0]);
+  await tick();
+  expect(m.calls).toContainEqual({ name: 'sendText', args: [PIXEL.fingerprint, 'yo'] });
 });
 
 test('background send errors show up as the error banner', async () => {

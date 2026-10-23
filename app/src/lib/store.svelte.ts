@@ -2,7 +2,7 @@ import type { Bridge } from './bridge';
 import {
   apply, initial, markAccepting, markDeclined, markExpired, markPending, type State, type Ticket,
 } from './state';
-import type { AppInfo, CoreEvent, Device, Pasted } from './types';
+import type { AppInfo, CoreEvent, Device } from './types';
 
 export function createStore(bridge: Bridge) {
   let state = $state<State>(initial());
@@ -11,12 +11,12 @@ export function createStore(bridge: Bridge) {
   let searching = $state(false);
   let dragging = $state(false);
   let error = $state<string | null>(null);
-  let toast = $state<string | null>(null);
-  let toastTimer: ReturnType<typeof setTimeout> | undefined;
-  const showToast = (text: string) => {
-    toast = text;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (toast = null), 2500);
+  let notice = $state<string | null>(null);
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  const showNotice = (text: string) => {
+    notice = text;
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => (notice = null), 2500);
   };
   const fail = (e: unknown) => {
     error = String(e);
@@ -75,7 +75,8 @@ export function createStore(bridge: Bridge) {
     get searching() { return searching; },
     get dragging() { return dragging; },
     get error() { return error; },
-    get toast() { return toast; },
+    /** short-lived hint shown in the conversation footer */
+    get notice() { return notice; },
     get selectedDevice(): Device | null { return selected ? (state.devices[selected] ?? null) : null; },
 
     start(): () => void {
@@ -110,9 +111,10 @@ export function createStore(bridge: Bridge) {
         error = 'Pick a device first, then paste.';
         return;
       }
-      const alias = state.devices[selected]?.alias ?? 'this device';
       try {
-        showToast(pastedText(await bridge.paste(selected), alias));
+        // What was pasted shows up as a ticket or bubble; only "nothing" needs words.
+        const pasted = await bridge.paste(selected);
+        if (pasted.kind === 'empty') showNotice('Nothing to paste. Copy a file, image or text first.');
       } catch (e) {
         fail(e);
       }
@@ -129,7 +131,8 @@ export function createStore(bridge: Bridge) {
     },
     cancel(transferId: string) { bridge.cancel(transferId).catch(fail); },
     retry(t: Ticket) {
-      if (t.sources.length) bridge.sendFiles(t.peer, t.sources).catch(fail);
+      if (t.text !== undefined) bridge.sendText(t.peer, t.text).catch(fail);
+      else if (t.sources.length) bridge.sendFiles(t.peer, t.sources).catch(fail);
     },
     reveal(path: string) { bridge.reveal(path).catch(fail); },
     refresh() {
@@ -161,15 +164,3 @@ export function createStore(bridge: Bridge) {
 
 export type Store = ReturnType<typeof createStore>;
 
-function pastedText(p: Pasted, alias: string): string {
-  switch (p.kind) {
-    case 'files':
-      return p.count === 1 ? `Pasted ${p.name} to ${alias}` : `Pasted ${p.count} files to ${alias}`;
-    case 'image':
-      return `Pasted a screenshot to ${alias}`;
-    case 'text':
-      return `Sent "${p.preview}" to ${alias}`;
-    case 'empty':
-      return 'Nothing to paste. Copy a file, image or text first.';
-  }
-}

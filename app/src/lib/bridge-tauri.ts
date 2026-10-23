@@ -23,6 +23,7 @@ export const tauriBridge: Bridge = {
   devices: () => invoke<Device[]>('devices'),
   knownDevices: () => invoke<KnownDevice[]>('known_devices'),
   sendFiles: (fingerprint, paths) => invoke('send_files', { fingerprint, paths }),
+  sendText: (fingerprint, text) => invoke('send_text', { fingerprint, text }),
   respond: (requestId, accept, dest) => invoke('respond', { requestId, accept, dest: dest ?? null }),
   cancel: (transferId) => invoke<boolean>('cancel', { transferId }),
   announce: () => invoke('announce'),

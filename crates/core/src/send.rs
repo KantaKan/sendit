@@ -87,12 +87,39 @@ fn target(n: &Inner, fingerprint: &str) -> Result<Device> {
 /// that wants it as a file answers 200, and then gets the bytes uploaded.
 pub(crate) async fn send_text(n: &Inner, fingerprint: &str, text: &str) -> Result<()> {
     let device = target(n, fingerprint)?;
-    let fail = |r: FailReason| Error::Transfer(r);
-    let client = PeerClient::new(&n.identity, Some(&device.fingerprint))?;
-    let base = device.base_url();
     let id = Uuid::new_v4().to_string();
-    let meta = FileMeta {
+    n.emit(Event::MessageSending {
         id: id.clone(),
+        peer: device.fingerprint.clone(),
+        text: text.to_string(),
+    });
+    match deliver_text(n, &device, &id, text).await {
+        Ok(()) => {
+            n.emit(Event::MessageSent { id });
+            Ok(())
+        }
+        Err(reason) => {
+            n.emit(Event::MessageFailed {
+                id,
+                reason: reason.clone(),
+            });
+            Err(Error::Transfer(reason))
+        }
+    }
+}
+
+async fn deliver_text(
+    n: &Inner,
+    device: &Device,
+    id: &str,
+    text: &str,
+) -> std::result::Result<(), FailReason> {
+    let fail = |r: FailReason| r;
+    let client = PeerClient::new(&n.identity, Some(&device.fingerprint))
+        .map_err(|e| FailReason::Protocol(e.to_string()))?;
+    let base = device.base_url();
+    let meta = FileMeta {
+        id: id.to_string(),
         file_name: format!("{id}.txt"),
         size: text.len() as u64,
         file_type: "text/plain".into(),
@@ -102,7 +129,7 @@ pub(crate) async fn send_text(n: &Inner, fingerprint: &str, text: &str) -> Resul
     };
     let request = PrepareUploadRequest {
         info: n.my_info(),
-        files: [(id.clone(), meta)].into(),
+        files: [(id.to_string(), meta)].into(),
     };
     let resp = client
         .http
@@ -111,7 +138,7 @@ pub(crate) async fn send_text(n: &Inner, fingerprint: &str, text: &str) -> Resul
         .timeout(n.cfg.request_timeout + Duration::from_secs(10))
         .send()
         .await
-        .map_err(|_| fail(connect_failure(&client, &device)))?;
+        .map_err(|_| fail(connect_failure(&client, device)))?;
     match resp.status().as_u16() {
         204 => {}
         200 => {
@@ -119,13 +146,13 @@ pub(crate) async fn send_text(n: &Inner, fingerprint: &str, text: &str) -> Resul
                 .json()
                 .await
                 .map_err(|e| fail(FailReason::Protocol(e.to_string())))?;
-            if let Some(token) = prep.files.get(&id) {
+            if let Some(token) = prep.files.get(id) {
                 let up = client
                     .http
                     .post(format!("{base}/upload"))
                     .query(&[
                         ("sessionId", prep.session_id.as_str()),
-                        ("fileId", id.as_str()),
+                        ("fileId", id),
                         ("token", token.as_str()),
                     ])
                     .body(text.to_string())
@@ -149,10 +176,6 @@ pub(crate) async fn send_text(n: &Inner, fingerprint: &str, text: &str) -> Resul
             ))))
         }
     }
-    n.emit(Event::MessageSent {
-        peer: device.fingerprint,
-        text: text.to_string(),
-    });
     Ok(())
 }
 

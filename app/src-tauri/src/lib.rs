@@ -59,6 +59,19 @@ pub async fn send_files_impl(
     }
 }
 
+/// Like `send_files_impl`: delivery failures arrive as `MessageFailed` events.
+pub async fn send_text_impl(node: &Node, fingerprint: &str, text: &str) -> Result<(), String> {
+    match node.send_text(fingerprint, text).await {
+        Ok(()) | Err(Error::Transfer(_)) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+async fn send_text(node: State<'_, Node>, fingerprint: String, text: String) -> Result<(), String> {
+    send_text_impl(&node, &fingerprint, &text).await
+}
+
 #[tauri::command]
 fn info(node: State<'_, Node>) -> AppInfo {
     app_info(&node)
@@ -178,7 +191,8 @@ pub fn run() {
             trust_new_key,
             block,
             set_verified,
-            paste
+            paste,
+            send_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running sendit");
@@ -306,10 +320,7 @@ async fn paste(
         let result = match clip {
             Clip::Files(paths) => send_files_impl(&node, &fingerprint, paths).await,
             Clip::Image(path) => send_files_impl(&node, &fingerprint, vec![path]).await,
-            Clip::Text(text) => node
-                .send_text(&fingerprint, &text)
-                .await
-                .map_err(|e| e.to_string()),
+            Clip::Text(text) => send_text_impl(&node, &fingerprint, &text).await,
             Clip::Empty => Ok(()),
         };
         if let Err(e) = result {
@@ -410,6 +421,13 @@ there"
         assert!(i.download_dir.ends_with("down"));
         assert_eq!(i.fingerprint, a.fingerprint());
         assert!(i.addresses.iter().all(|x| x.parse::<IpAddr>().is_ok()));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn text_to_unknown_device_is_an_error() {
+        let d = tempfile::tempdir().unwrap();
+        let a = node("a", d.path()).await;
+        assert!(send_text_impl(&a, "ABCDEF", "hi").await.is_err());
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -87,6 +87,6 @@ test('Ctrl+V pastes to the open conversation', async ({ page }) => {
   await boot(page, { devices: [PIXEL], pasted: { kind: 'files', count: 2, name: 'a.pdf' } });
   await page.getByRole('button', { name: /Pixel 8/ }).click();
   await page.keyboard.press('Control+V');
-  await expect(page.getByText('Pasted 2 files to Pixel 8')).toBeVisible();
+  await expect.poll(() => calls(page, 'paste')).toHaveLength(1);
   expect(await calls(page, 'paste')).toEqual([{ name: 'paste', args: [PIXEL.fingerprint] }]);
 });

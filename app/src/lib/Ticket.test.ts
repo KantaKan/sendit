@@ -86,3 +86,27 @@ test('outgoing message sits on the right', () => {
   expect(container.querySelector('.row.out')).not.toBeNull();
   expect(screen.queryByText(/unverified/)).not.toBeInTheDocument();
 });
+
+test('a message being sent says so', () => {
+  const t: T = { ...base, direction: 'outgoing', status: 'sending', text: 'on its way', files: [], total: 0 };
+  render(Ticket, { props: { ticket: t, destLabel: 'd', ...handlers() } });
+  expect(screen.getByText('on its way')).toBeInTheDocument();
+  expect(screen.getByText(/Sending/)).toBeInTheDocument();
+});
+
+test('a failed message shows why and can be retried', async () => {
+  const h = handlers();
+  const t: T = { ...base, direction: 'outgoing', status: 'failed', text: 'lost', files: [], total: 0, reason: { kind: 'peerGone' } };
+  render(Ticket, { props: { ticket: t, destLabel: 'd', ...h } });
+  expect(screen.getByText('lost')).toBeInTheDocument();
+  expect(screen.getByText('Connection lost')).toBeInTheDocument();
+  await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  expect(h.onretry).toHaveBeenCalled();
+});
+
+test('an outgoing file waiting for the other side says who it waits for', () => {
+  const t: T = { ...base, direction: 'outgoing', status: 'live', transferId: 't', bytes: 0 };
+  render(Ticket, { props: { ticket: t, destLabel: 'd', peerAlias: 'iPhone', ...handlers() } });
+  expect(screen.getByText(/Waiting for iPhone to accept/)).toBeInTheDocument();
+});
+

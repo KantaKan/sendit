@@ -65,7 +65,9 @@ export type CoreEvent =
   | { type: 'incomingRequest'; request: IncomingRequest }
   | { type: 'requestExpired'; requestId: string }
   | { type: 'messageReceived'; from: Device; text: string; senderVerified: boolean }
-  | { type: 'messageSent'; peer: string; text: string }
+  | { type: 'messageSending'; id: string; peer: string; text: string }
+  | { type: 'messageSent'; id: string }
+  | { type: 'messageFailed'; id: string; reason: FailReason }
   | {
       type: 'transferStarted';
       transferId: string;

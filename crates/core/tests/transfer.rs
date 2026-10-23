@@ -179,12 +179,21 @@ line 2";
     };
     assert_eq!(text, msg);
     assert!(sender_verified);
-    let Event::MessageSent { peer, text } =
-        wait_for(&mut arx, |e| matches!(e, Event::MessageSent { .. })).await
+    let Event::MessageSending {
+        id: started,
+        peer,
+        text,
+    } = wait_for(&mut arx, |e| matches!(e, Event::MessageSending { .. })).await
     else {
         unreachable!()
     };
     assert_eq!((peer.as_str(), text.as_str()), (b.node.fingerprint(), msg));
+    let Event::MessageSent { id } =
+        wait_for(&mut arx, |e| matches!(e, Event::MessageSent { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(id, started);
     assert_eq!(std::fs::read_dir(b.down()).unwrap().count(), 0);
 }
 
@@ -195,4 +204,19 @@ async fn text_to_unknown_device_errors() {
         a.node.send_text("ABCDEF", "hi").await.unwrap_err(),
         Error::UnknownDevice(_)
     ));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failed_text_reports_why() {
+    let a = peer("alice").await;
+    let b = peer_with("bob", |c| c.pin = Some("1".into())).await;
+    a.node.add_peer(b.addr()).await.unwrap();
+    let mut rx = a.node.subscribe();
+    assert!(a.node.send_text(b.node.fingerprint(), "hi").await.is_err());
+    let Event::MessageFailed { reason, .. } =
+        wait_for(&mut rx, |e| matches!(e, Event::MessageFailed { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(reason, FailReason::PinRequired);
 }
