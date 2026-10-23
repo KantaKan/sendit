@@ -25,18 +25,7 @@ pub(crate) async fn send(
     paths: Vec<PathBuf>,
     pin: Option<String>,
 ) -> Result<String> {
-    let device = n
-        .devices
-        .lock()
-        .unwrap()
-        .get(&fingerprint.to_uppercase())
-        .cloned()
-        .ok_or_else(|| Error::UnknownDevice(fingerprint.into()))?;
-    match device.trust {
-        TrustLevel::Suspect => return Err(Error::Suspect),
-        TrustLevel::Blocked => return Err(Error::Blocked),
-        _ => {}
-    }
+    let device = target(n, fingerprint)?;
     let files = collect_files(&paths)?;
     let total = files.iter().map(|(m, _)| m.size).sum();
     let id = Uuid::new_v4().to_string();
@@ -75,6 +64,96 @@ pub(crate) async fn send(
             Err(Error::Transfer(reason))
         }
     }
+}
+
+/// A known device we are allowed to send to.
+fn target(n: &Inner, fingerprint: &str) -> Result<Device> {
+    let device = n
+        .devices
+        .lock()
+        .unwrap()
+        .get(&fingerprint.to_uppercase())
+        .cloned()
+        .ok_or_else(|| Error::UnknownDevice(fingerprint.into()))?;
+    match device.trust {
+        TrustLevel::Suspect => Err(Error::Suspect),
+        TrustLevel::Blocked => Err(Error::Blocked),
+        _ => Ok(device),
+    }
+}
+
+/// Sends text the way LocalSend does: one `text/plain` file whose content is
+/// in `preview`. LocalSend shows it as a message and answers 204. A receiver
+/// that wants it as a file answers 200, and then gets the bytes uploaded.
+pub(crate) async fn send_text(n: &Inner, fingerprint: &str, text: &str) -> Result<()> {
+    let device = target(n, fingerprint)?;
+    let fail = |r: FailReason| Error::Transfer(r);
+    let client = PeerClient::new(&n.identity, Some(&device.fingerprint))?;
+    let base = device.base_url();
+    let id = Uuid::new_v4().to_string();
+    let meta = FileMeta {
+        id: id.clone(),
+        file_name: format!("{id}.txt"),
+        size: text.len() as u64,
+        file_type: "text/plain".into(),
+        sha256: None,
+        preview: Some(text.to_string()),
+        metadata: None,
+    };
+    let request = PrepareUploadRequest {
+        info: n.my_info(),
+        files: [(id.clone(), meta)].into(),
+    };
+    let resp = client
+        .http
+        .post(format!("{base}/prepare-upload"))
+        .json(&request)
+        .timeout(n.cfg.request_timeout + Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|_| fail(connect_failure(&client, &device)))?;
+    match resp.status().as_u16() {
+        204 => {}
+        200 => {
+            let prep: PrepareUploadResponse = resp
+                .json()
+                .await
+                .map_err(|e| fail(FailReason::Protocol(e.to_string())))?;
+            if let Some(token) = prep.files.get(&id) {
+                let up = client
+                    .http
+                    .post(format!("{base}/upload"))
+                    .query(&[
+                        ("sessionId", prep.session_id.as_str()),
+                        ("fileId", id.as_str()),
+                        ("token", token.as_str()),
+                    ])
+                    .body(text.to_string())
+                    .send()
+                    .await
+                    .map_err(|_| fail(FailReason::PeerGone))?;
+                if !up.status().is_success() {
+                    return Err(fail(FailReason::Protocol(format!(
+                        "upload returned {}",
+                        up.status()
+                    ))));
+                }
+            }
+        }
+        401 => return Err(fail(FailReason::PinRequired)),
+        403 => return Err(fail(FailReason::Declined)),
+        409 | 429 => return Err(fail(FailReason::Busy)),
+        s => {
+            return Err(fail(FailReason::Protocol(format!(
+                "prepare-upload returned {s}"
+            ))))
+        }
+    }
+    n.emit(Event::MessageSent {
+        peer: device.fingerprint,
+        text: text.to_string(),
+    });
+    Ok(())
 }
 
 async fn run(

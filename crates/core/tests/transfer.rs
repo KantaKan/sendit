@@ -160,3 +160,39 @@ async fn started_event_carries_sources() {
     };
     assert_eq!(sources, vec![src]);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sends_text_messages() {
+    let (a, b) = pair().await;
+    let mut brx = b.node.subscribe();
+    let mut arx = a.node.subscribe();
+    let msg = "hello ไทย
+line 2";
+    a.node.send_text(b.node.fingerprint(), msg).await.unwrap();
+    let Event::MessageReceived {
+        text,
+        sender_verified,
+        ..
+    } = wait_for(&mut brx, |e| matches!(e, Event::MessageReceived { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!(text, msg);
+    assert!(sender_verified);
+    let Event::MessageSent { peer, text } =
+        wait_for(&mut arx, |e| matches!(e, Event::MessageSent { .. })).await
+    else {
+        unreachable!()
+    };
+    assert_eq!((peer.as_str(), text.as_str()), (b.node.fingerprint(), msg));
+    assert_eq!(std::fs::read_dir(b.down()).unwrap().count(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn text_to_unknown_device_errors() {
+    let a = peer("alice").await;
+    assert!(matches!(
+        a.node.send_text("ABCDEF", "hi").await.unwrap_err(),
+        Error::UnknownDevice(_)
+    ));
+}

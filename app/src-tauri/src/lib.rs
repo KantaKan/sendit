@@ -1,14 +1,15 @@
 //! The desktop shell: one sendit `Node`, exposed to the webview as commands,
 //! with every core event forwarded as `core-event`.
+use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext, ContentFormat};
 use sendit_core::{
     protocol::DEFAULT_PORT, trust::KnownDevice, Config, Decision, Device, Error, Node,
 };
 use serde::Serialize;
 use std::{
     net::{IpAddr, SocketAddr},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::broadcast::error::RecvError;
 
 #[derive(Serialize, Debug)]
@@ -19,6 +20,8 @@ pub struct AppInfo {
     pub port: u16,
     pub port_fallback: bool,
     pub download_dir: PathBuf,
+    /// LAN IPv4 addresses; the UI shows the most likely one.
+    pub addresses: Vec<String>,
 }
 
 pub fn app_info(node: &Node) -> AppInfo {
@@ -28,6 +31,7 @@ pub fn app_info(node: &Node) -> AppInfo {
         port: node.port(),
         port_fallback: node.port_fallback(),
         download_dir: node.download_dir().to_path_buf(),
+        addresses: node.local_ips().iter().map(|ip| ip.to_string()).collect(),
     }
 }
 
@@ -173,15 +177,200 @@ pub fn run() {
             add_peer,
             trust_new_key,
             block,
-            set_verified
+            set_verified,
+            paste
         ])
         .run(tauri::generate_context!())
         .expect("error while running sendit");
 }
 
+/// What the clipboard held, checked in this order.
+pub enum Clip {
+    Files(Vec<PathBuf>),
+    Image(PathBuf),
+    Text(String),
+    Empty,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Pasted {
+    Files { count: usize, name: String },
+    Image { name: String },
+    Text { preview: String },
+    Empty,
+}
+
+/// A short summary for the "Pasted ... to X" toast.
+pub fn describe(c: &Clip) -> Pasted {
+    let name = |p: &Path| {
+        p.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    match c {
+        Clip::Files(paths) => Pasted::Files {
+            count: paths.len(),
+            name: paths.first().map(|p| name(p)).unwrap_or_default(),
+        },
+        Clip::Image(p) => Pasted::Image { name: name(p) },
+        Clip::Text(t) => {
+            let flat: String = t.split_whitespace().collect::<Vec<_>>().join(" ");
+            let preview = if flat.chars().count() > 60 {
+                flat.chars().take(60).chain(['…']).collect()
+            } else {
+                flat
+            };
+            Pasted::Text { preview }
+        }
+        Clip::Empty => Pasted::Empty,
+    }
+}
+
+/// Clipboard file lists are plain paths on Windows and file:// URLs elsewhere.
+pub fn file_path(s: &str) -> PathBuf {
+    let Some(rest) = s.strip_prefix("file://") else {
+        return PathBuf::from(s);
+    };
+    let mut bytes = Vec::with_capacity(rest.len());
+    let raw = rest.as_bytes();
+    let mut i = 0;
+    while i < raw.len() {
+        let hex = raw
+            .get(i + 1..i + 3)
+            .and_then(|h| std::str::from_utf8(h).ok());
+        match (raw[i], hex.and_then(|h| u8::from_str_radix(h, 16).ok())) {
+            (b'%', Some(b)) => {
+                bytes.push(b);
+                i += 3;
+            }
+            (c, _) => {
+                bytes.push(c);
+                i += 1;
+            }
+        }
+    }
+    PathBuf::from(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Reads the OS clipboard: copied files first, then an image (saved as PNG in
+/// `tmp`), then text.
+// ponytail: pasted screenshots pile up in the app cache dir; clean on startup if it grows.
+fn read_clipboard(tmp: &Path) -> Clip {
+    let Ok(ctx) = ClipboardContext::new() else {
+        return Clip::Empty;
+    };
+    if let Ok(files) = ctx.get_files() {
+        let paths: Vec<PathBuf> = files.iter().map(|f| file_path(f)).collect();
+        if !paths.is_empty() {
+            return Clip::Files(paths);
+        }
+    }
+    if ctx.has(ContentFormat::Image) {
+        if let Ok(img) = ctx.get_image() {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or_default();
+            let path = tmp.join(format!("screenshot-{stamp}.png"));
+            if std::fs::create_dir_all(tmp).is_ok()
+                && img.save_to_path(&path.to_string_lossy()).is_ok()
+            {
+                return Clip::Image(path);
+            }
+        }
+    }
+    match ctx.get_text() {
+        Ok(t) if !t.trim().is_empty() => Clip::Text(t),
+        _ => Clip::Empty,
+    }
+}
+
+/// Ctrl/Cmd+V: send whatever is on the clipboard to `fingerprint`. Returns
+/// at once with a summary; failures arrive later as an `app-error` event.
+#[tauri::command]
+async fn paste(
+    app: AppHandle,
+    node: State<'_, Node>,
+    fingerprint: String,
+) -> Result<Pasted, String> {
+    let tmp = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("clipboard");
+    let clip = read_clipboard(&tmp);
+    let pasted = describe(&clip);
+    let node = node.inner().clone();
+    tauri::async_runtime::spawn(async move {
+        let result = match clip {
+            Clip::Files(paths) => send_files_impl(&node, &fingerprint, paths).await,
+            Clip::Image(path) => send_files_impl(&node, &fingerprint, vec![path]).await,
+            Clip::Text(text) => node
+                .send_text(&fingerprint, &text)
+                .await
+                .map_err(|e| e.to_string()),
+            Clip::Empty => Ok(()),
+        };
+        if let Err(e) = result {
+            let _ = app.emit("app-error", e);
+        }
+    });
+    Ok(pasted)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn describes_what_was_pasted() {
+        let files = Clip::Files(vec!["C:/a/report.pdf".into(), "C:/a/b.png".into()]);
+        assert_eq!(
+            describe(&files),
+            Pasted::Files {
+                count: 2,
+                name: "report.pdf".into()
+            }
+        );
+        let img = Clip::Image("C:/tmp/screenshot-1.png".into());
+        assert_eq!(
+            describe(&img),
+            Pasted::Image {
+                name: "screenshot-1.png".into()
+            }
+        );
+        let long = "x".repeat(200);
+        let Pasted::Text { preview } = describe(&Clip::Text(long)) else {
+            panic!()
+        };
+        assert_eq!(preview.chars().count(), 61);
+        assert!(preview.ends_with('…'));
+        assert_eq!(
+            describe(&Clip::Text(
+                "hi
+there"
+                    .into()
+            )),
+            Pasted::Text {
+                preview: "hi there".into()
+            }
+        );
+        assert_eq!(describe(&Clip::Empty), Pasted::Empty);
+    }
+
+    #[test]
+    fn file_urls_become_paths() {
+        assert_eq!(file_path(r"C:\x\a b.txt"), PathBuf::from(r"C:\x\a b.txt"));
+        assert_eq!(
+            file_path("file:///home/me/a%20b.txt"),
+            PathBuf::from("/home/me/a b.txt")
+        );
+        assert_eq!(
+            file_path("file:///Users/me/%E0%B8%81.txt"),
+            PathBuf::from("/Users/me/ก.txt")
+        );
+    }
     use sendit_core::{Config, Decision, Event, Node};
     use std::{net::Ipv4Addr, path::Path, time::Duration};
 
@@ -220,6 +409,7 @@ mod tests {
         assert!(!i.port_fallback);
         assert!(i.download_dir.ends_with("down"));
         assert_eq!(i.fingerprint, a.fingerprint());
+        assert!(i.addresses.iter().all(|x| x.parse::<IpAddr>().is_ok()));
     }
 
     #[tokio::test(flavor = "multi_thread")]

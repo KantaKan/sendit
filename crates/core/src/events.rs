@@ -104,6 +104,11 @@ pub enum Event {
         text: String,
         sender_verified: bool,
     },
+    /// We sent a text message and the peer took it.
+    MessageSent {
+        peer: String,
+        text: String,
+    },
     /// An IncomingRequest that was never answered (timeout or sender hung up).
     RequestExpired {
         request_id: String,

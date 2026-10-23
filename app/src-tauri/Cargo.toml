@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+clipboard-rs = "0.3"
 gethostname = "0.5"
 sendit-core = { path = "../../crates/core" }
 serde = { version = "1", features = ["derive"] }

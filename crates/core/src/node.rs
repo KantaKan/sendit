@@ -329,6 +329,11 @@ impl Node {
         send::send(&self.inner, fingerprint, paths, pin).await
     }
 
+    /// Sends a text message (shown as a message by LocalSend, not saved as a file).
+    pub async fn send_text(&self, fingerprint: &str, text: &str) -> Result<()> {
+        send::send_text(&self.inner, fingerprint, text).await
+    }
+
     /// Cancels an outgoing or incoming transfer. Returns false if it was unknown.
     pub fn cancel(&self, transfer_id: &str) -> bool {
         if let Some(token) = self.inner.outgoing.lock().unwrap().get(transfer_id) {
@@ -346,6 +351,11 @@ impl Node {
     /// Slow fallback for networks that block multicast.
     pub async fn scan(&self) -> Vec<Device> {
         discovery::scan(&self.inner).await
+    }
+
+    /// This machine's LAN IPv4 addresses (what other devices reach us on).
+    pub fn local_ips(&self) -> Vec<std::net::Ipv4Addr> {
+        discovery::ipv4_interfaces()
     }
 
     /// Every device in the trust store (for "seen before").
