@@ -199,3 +199,6 @@ export function bytesToday(ts: Ticket[], now: number): number {
     .filter((t) => t.status === 'done' && t.doneAt !== undefined && new Date(t.doneAt).toDateString() === day)
     .reduce((sum, t) => sum + t.total, 0);
 }
+
+/** Forget one item (the file itself is untouched). */
+export const removeTicket = (s: State, key: string): State => ({ ...s, tickets: s.tickets.filter((t) => t.key !== key) });

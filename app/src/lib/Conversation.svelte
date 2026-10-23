@@ -1,5 +1,6 @@
 <script lang="ts">
   import Avatar from './Avatar.svelte';
+  import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import IdentityPanel from './IdentityPanel.svelte';
   import { formatBytes, isImage, lastTwo, modKey } from './format';
   import { bytesToday, sections, type Ticket } from './state';
@@ -30,6 +31,21 @@
   const PEEK_W = 220;
   const PEEK_H = 150;
   let peek = $state<{ src: string; left: number; top: number } | null>(null);
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  function openMenu(t: Ticket, x: number, y: number) {
+    const path = t.direction === 'outgoing' ? t.sources[0] : t.paths[0];
+    const items: MenuItem[] = [];
+    if (t.text !== undefined) {
+      items.push({ label: 'Copy text', run: () => void navigator.clipboard.writeText(t.text ?? '') });
+    } else if (path) {
+      if (t.status === 'done') items.push({ label: 'Show in folder', run: () => store.reveal(path) });
+      items.push({ label: 'Copy path', run: () => void navigator.clipboard.writeText(path) });
+    }
+    if (t.status === 'failed' && t.direction === 'outgoing') items.push({ label: 'Retry', run: () => store.retry(t) });
+    items.push({ label: 'Remove from history', danger: true, run: () => store.removeTicket(t.key) });
+    peek = null;
+    menu = { x, y, items };
+  }
   function showPeek(src: string | null, at: DOMRect | null) {
     if (!src || !at) {
       peek = null;
@@ -96,14 +112,15 @@
       {/if}
       {#if sec.history.length}
         <p class="label">Earlier</p>
-        <div class="rows">
+        <div class="rows" role="list">
           {#each sec.history as t (t.key)}
-            <HistoryRow ticket={t} thumb={thumbFor(t)} onretry={() => store.retry(t)} onreveal={store.reveal} onpeek={showPeek} />
+            <HistoryRow ticket={t} thumb={thumbFor(t)} onretry={() => store.retry(t)} onreveal={store.reveal} onpeek={showPeek} onmenu={openMenu} />
           {/each}
         </div>
       {/if}
     {/if}
   </div>
+  {#if menu}<ContextMenu {...menu} onclose={() => (menu = null)} />{/if}
   {#if peek}
     <img class="peek" data-testid="peek" src={peek.src} alt="" style:left="{peek.left}px" style:top="{peek.top}px" />
   {/if}

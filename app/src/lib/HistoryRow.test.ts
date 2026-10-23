@@ -68,3 +68,10 @@ test('a thumbnail that fails to load falls back to the type tile', async () => {
   await fireEvent.error(document.querySelector('img')!);
   expect(screen.getByText('JPG')).toBeInTheDocument();
 });
+
+test('right-click asks for the menu with the row and the pointer position', async () => {
+  const onmenu = vi.fn();
+  const { container } = render(HistoryRow, { props: { ticket: done, thumb: null, ...h(), onmenu } });
+  await fireEvent.contextMenu(container.querySelector('.row')!, { clientX: 50, clientY: 60 });
+  expect(onmenu).toHaveBeenCalledWith(done, 50, 60);
+});

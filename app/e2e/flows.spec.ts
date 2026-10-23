@@ -98,8 +98,8 @@ async function history(page: Page) {
     const id = `t${i}`;
     const out = i % 2 === 0;
     await emit(page, { type: 'transferStarted', transferId: id, requestId: null, direction: out ? 'outgoing' : 'incoming', peer: PIXEL.fingerprint,
-      files: [{ id, fileName: name, size: 1000, fileType: '' }], total: 1000, sources: out ? [`C:\${name}`] : [] });
-    await emit(page, { type: 'transferDone', transferId: id, direction: out ? 'outgoing' : 'incoming', paths: out ? [] : [`C:\d\${name}`] });
+      files: [{ id, fileName: name, size: 1000, fileType: '' }], total: 1000, sources: out ? [`C:/${name}`] : [] });
+    await emit(page, { type: 'transferDone', transferId: id, direction: out ? 'outgoing' : 'incoming', paths: out ? [] : [`C:/d/${name}`] });
   }
   await page.waitForTimeout(700); // let entry animations finish
 }
@@ -130,3 +130,25 @@ test('hovering the top thumbnail shows its preview fully, on top of everything',
   expect(topmost).toBe('peek');
 });
 
+test('right-click a history row: show, copy, remove', async ({ page }) => {
+  await history(page);
+  const row = page.locator('.row', { hasText: 'b.jpg' });
+  await row.click({ button: 'right' });
+  const menu = page.getByRole('menu');
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show in folder', 'Copy path', 'Remove from history']);
+  await menu.getByRole('menuitem', { name: 'Show in folder' }).click();
+  expect((await calls(page, 'reveal'))[0].args[0]).toContain('b.jpg');
+  await expect(menu).toHaveCount(0);
+  await row.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Remove from history' }).click();
+  await expect(page.locator('.row', { hasText: 'b.jpg' })).toHaveCount(0);
+});
+
+test('right-click a message row offers to copy the text', async ({ page }) => {
+  await boot(page, { devices: [PIXEL] });
+  await emit(page, { type: 'messageReceived', from: PIXEL, text: 'copy me', senderVerified: true });
+  await page.locator('.row', { hasText: 'copy me' }).click({ button: 'right' });
+  await expect(page.getByRole('menu').getByRole('menuitem')).toHaveText(['Copy text', 'Remove from history']);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+});

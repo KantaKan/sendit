@@ -4,7 +4,7 @@
   import type { Ticket } from './state';
 
   let {
-    ticket, thumb, onretry, onreveal, onpeek = () => {},
+    ticket, thumb, onretry, onreveal, onpeek = () => {}, onmenu = () => {},
   }: {
     ticket: Ticket;
     thumb: string | null;
@@ -12,6 +12,8 @@
     onreveal: (path: string) => void;
     /** hover preview: the image and where its thumbnail sits, or null to hide */
     onpeek?: (src: string | null, at: DOMRect | null) => void;
+    /** right-click: open the row menu at the pointer */
+    onmenu?: (ticket: Ticket, x: number, y: number) => void;
   } = $props();
 
   const isMessage = $derived(ticket.text !== undefined);
@@ -43,7 +45,16 @@
   }
 </script>
 
-<div class="row" class:in={!out} class:muted={!!status}>
+<div
+  class="row"
+  class:in={!out}
+  class:muted={!!status}
+  role="listitem"
+  oncontextmenu={(e) => {
+    e.preventDefault();
+    onmenu(ticket, e.clientX, e.clientY);
+  }}
+>
   {#if isMessage}
     <div class="tile quote" aria-hidden="true">“</div>
   {:else if thumb && !broken}

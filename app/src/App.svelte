@@ -24,9 +24,15 @@
       void store.paste();
     };
     window.addEventListener('keydown', onKey);
+    const onContext = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!(t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA'))) e.preventDefault();
+    };
+    window.addEventListener('contextmenu', onContext);
     return () => {
       stop();
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('contextmenu', onContext);
     };
   });
 

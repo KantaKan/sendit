@@ -1,6 +1,6 @@
 import type { Bridge } from './bridge';
 import {
-  apply, initial, markAccepting, markDeclined, markExpired, markPending, type State, type Ticket,
+  apply, initial, markAccepting, removeTicket, markDeclined, markExpired, markPending, type State, type Ticket,
 } from './state';
 import type { AppInfo, CoreEvent, Device } from './types';
 
@@ -135,6 +135,9 @@ export function createStore(bridge: Bridge) {
       else if (t.sources.length) bridge.sendFiles(t.peer, t.sources).catch(fail);
     },
     fileUrl: (path: string) => bridge.fileUrl(path),
+    removeTicket(key: string) {
+      state = removeTicket(state, key);
+    },
     reveal(path: string) { bridge.reveal(path).catch(fail); },
     refresh() {
       searching = true;

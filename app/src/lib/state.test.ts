@@ -191,3 +191,12 @@ describe('timeline', () => {
     expect(bytesToday(s.tickets, today)).toBe(10);
   });
 });
+
+import { removeTicket } from './state';
+
+test('removeTicket drops one item from the history', () => {
+  let s = apply(initial(), started('outgoing', 'a'), 1);
+  s = apply(s, started('outgoing', 'b'), 1);
+  s = removeTicket(s, 'a');
+  expect(ticketsFor(s, PIXEL.fingerprint).map((t) => t.transferId)).toEqual(['b']);
+});
