@@ -16,6 +16,8 @@
   --faint: #85858b;
   --accent: #3ecf8e;
   --accent-ink: #0d1f16;
+  /* direction of a transfer: sent uses --accent, received uses --in */
+  --in: #7aa2ff;
   --danger: #e5533d;
   --danger-text: #ff7a63;
   --danger-bg: #2a1714;

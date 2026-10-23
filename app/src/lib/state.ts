@@ -22,6 +22,12 @@ export interface Ticket {
   text?: string;
   /** id of an outgoing message (MessageSending/Sent/Failed) */
   messageId?: string;
+  /** recent transfer speeds in bytes/s, newest last */
+  speeds?: number[];
+  /** time of the last progress event */
+  lastAt?: number;
+  /** when it finished (done, failed, declined…) */
+  doneAt?: number;
   /** ms timestamp the ticket appeared */
   at: number;
 }
@@ -137,9 +143,9 @@ export function apply(s: State, e: CoreEvent, now: number): State {
       return { ...s, tickets: [...s.tickets, ticket] };
     }
     case 'messageSent':
-      return patch(s, (t) => t.messageId === e.id, () => ({ status: 'message', at: now }));
+      return patch(s, (t) => t.messageId === e.id, () => ({ status: 'message', at: now, doneAt: now }));
     case 'messageFailed':
-      return patch(s, (t) => t.messageId === e.id, () => ({ status: 'failed', reason: e.reason }));
+      return patch(s, (t) => t.messageId === e.id, () => ({ status: 'failed', reason: e.reason, doneAt: now }));
     case 'requestExpired':
       return patch(
         s,
@@ -147,13 +153,17 @@ export function apply(s: State, e: CoreEvent, now: number): State {
         () => ({ status: 'expired' }),
       );
     case 'progress':
-      return patch(s, byTransfer(e.transferId), () => ({ bytes: e.bytes }));
+      return patch(s, byTransfer(e.transferId), (t) => {
+        const dt = (now - (t.lastAt ?? t.at)) / 1000;
+        const speeds = dt > 0 ? [...(t.speeds ?? []), (e.bytes - t.bytes) / dt].slice(-30) : t.speeds;
+        return { bytes: e.bytes, speeds, lastAt: now };
+      });
     case 'transferDone':
-      return patch(s, byTransfer(e.transferId), (t) => ({ status: 'done', bytes: t.total, paths: e.paths }));
+      return patch(s, byTransfer(e.transferId), (t) => ({ status: 'done', bytes: t.total, paths: e.paths, doneAt: now }));
     case 'transferFailed': {
       const status: TicketStatus =
         e.reason.kind === 'cancelled' ? 'cancelled' : e.reason.kind === 'declined' ? 'declined' : 'failed';
-      return patch(s, byTransfer(e.transferId), () => ({ status, reason: e.reason }));
+      return patch(s, byTransfer(e.transferId), () => ({ status, reason: e.reason, doneAt: now }));
     }
   }
 }
@@ -171,3 +181,21 @@ const byAlias = (a: { alias: string }, b: { alias: string }) =>
 export const nearby = (s: State) => Object.values(s.devices).sort(byAlias);
 
 export const seenBefore = (s: State) => s.known.filter((k) => !s.devices[k.fingerprint]).sort(byAlias);
+
+/** Requests waiting for an answer, what is moving now, and finished items (newest first). */
+export function sections(ts: Ticket[]) {
+  const requests = ts.filter((t) => t.status === 'pending' || t.status === 'accepting');
+  const now = ts.filter((t) => t.status === 'live' || t.status === 'sending');
+  const history = ts
+    .filter((t) => !requests.includes(t) && !now.includes(t))
+    .sort((a, b) => (b.doneAt ?? b.at) - (a.doneAt ?? a.at));
+  return { requests, now, history };
+}
+
+/** Bytes of transfers that finished on the same calendar day as `now`. */
+export function bytesToday(ts: Ticket[], now: number): number {
+  const day = new Date(now).toDateString();
+  return ts
+    .filter((t) => t.status === 'done' && t.doneAt !== undefined && new Date(t.doneAt).toDateString() === day)
+    .reduce((sum, t) => sum + t.total, 0);
+}

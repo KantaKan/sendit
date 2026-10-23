@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -41,6 +41,7 @@ export const tauriBridge: Bridge = {
     return typeof r === 'string' ? r : null;
   },
   reveal: (path) => revealItemInDir(path),
+  fileUrl: (path) => convertFileSrc(path),
   notify: (title, body) => {
     void (async () => {
       let ok = await isPermissionGranted();

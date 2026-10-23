@@ -37,3 +37,38 @@ export function primaryIp(addresses: string[]): string | null {
 
 /** "Cmd" on macOS, "Ctrl" elsewhere. */
 export const modKey = () => (/Mac|iPhone|iPad/.test(navigator.userAgent) ? 'Cmd' : 'Ctrl');
+
+const IMAGE = /\.(jpe?g|png|gif|webp|heic|heif|bmp|avif)$/i;
+const VIDEO = /\.(mp4|mov|m4v|mkv|webm|avi)$/i;
+export const isImage = (name: string) => IMAGE.test(name);
+export const isVideo = (name: string) => VIDEO.test(name);
+
+/** "204 of 318 MB": both numbers in the total's unit. */
+export function bytesOf(bytes: number, total: number): string {
+  let i = 0;
+  while (total / 1000 ** (i + 1) >= 1 && i < UNITS.length - 1) i++;
+  const f = (n: number) => {
+    const v = n / 1000 ** i;
+    return i === 0 ? String(n) : v < 10 ? v.toFixed(1) : String(Math.round(v));
+  };
+  return `${f(bytes)} of ${f(total)} ${UNITS[i]}`;
+}
+
+/** Seconds as m:ss or h:mm:ss. */
+export function eta(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--';
+  const s = Math.round(seconds);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+/** "2 photos, 1 video" / "3 files". */
+export function summarize(files: { fileName: string }[]): string {
+  const photos = files.filter((f) => isImage(f.fileName)).length;
+  const videos = files.filter((f) => isVideo(f.fileName)).length;
+  const other = files.length - photos - videos;
+  const part = (n: number, word: string) => (n ? `${n} ${word}${n === 1 ? '' : 's'}` : '');
+  return [part(photos, 'photo'), part(videos, 'video'), part(other, 'file')].filter(Boolean).join(', ');
+}

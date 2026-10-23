@@ -20,6 +20,8 @@ export interface Bridge {
   pickFiles(): Promise<string[]>;
   pickFolder(): Promise<string | null>;
   reveal(path: string): Promise<void>;
+  /** URL the webview can load a local file from (thumbnails). */
+  fileUrl(path: string): string;
   notify(title: string, body: string): void;
   /** Send whatever is on the OS clipboard to this device. */
   paste(fingerprint: string): Promise<Pasted>;

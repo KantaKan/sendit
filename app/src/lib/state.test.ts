@@ -154,3 +154,40 @@ test('a failed message keeps its text and the reason', () => {
   s = apply(s, { type: 'messageFailed', id: 'm1', reason: { kind: 'peerGone' } }, 10);
   expect(ticketsFor(s, PIXEL.fingerprint)[0]).toMatchObject({ status: 'failed', text: 'yo', reason: { kind: 'peerGone' } });
 });
+
+import { bytesToday, sections } from './state';
+
+describe('timeline', () => {
+  test('progress records speed samples (bytes/s) and done records when', () => {
+    let s = apply(initial(), started('outgoing', 't1'), 0);
+    s = apply(s, { type: 'progress', transferId: 't1', direction: 'outgoing', bytes: 4, total: 10 }, 1000);
+    s = apply(s, { type: 'progress', transferId: 't1', direction: 'outgoing', bytes: 10, total: 10 }, 2000);
+    expect(ticketsFor(s, PIXEL.fingerprint)[0].speeds).toEqual([4, 6]);
+    s = apply(s, { type: 'transferDone', transferId: 't1', direction: 'outgoing', paths: [] }, 2500);
+    expect(ticketsFor(s, PIXEL.fingerprint)[0].doneAt).toBe(2500);
+  });
+
+  test('sections: requests, then what is moving now, then history newest first', () => {
+    let s = apply(initial(), started('outgoing', 'old'), 1);
+    s = apply(s, { type: 'transferDone', transferId: 'old', direction: 'outgoing', paths: [] }, 2);
+    s = apply(s, started('outgoing', 'new'), 3);
+    s = apply(s, { type: 'transferDone', transferId: 'new', direction: 'outgoing', paths: [] }, 4);
+    s = apply(s, started('incoming', 'live'), 5);
+    s = apply(s, { type: 'messageSending', id: 'm', peer: PIXEL.fingerprint, text: 'x' }, 6);
+    s = apply(s, request('r1'), 7);
+    const { requests, now, history } = sections(ticketsFor(s, PIXEL.fingerprint));
+    expect(requests.map((t) => t.requestId)).toEqual(['r1']);
+    expect(now.map((t) => t.transferId ?? t.messageId)).toEqual(['live', 'm']);
+    expect(history.map((t) => t.transferId)).toEqual(['new', 'old']);
+  });
+
+  test('bytesToday sums finished transfers from today only', () => {
+    const today = new Date(2026, 9, 23, 14, 0).getTime();
+    const yesterday = new Date(2026, 9, 22, 14, 0).getTime();
+    let s = apply(initial(), started('outgoing', 'a'), today);
+    s = apply(s, { type: 'transferDone', transferId: 'a', direction: 'outgoing', paths: [] }, today);
+    s = apply(s, started('outgoing', 'b'), yesterday);
+    s = apply(s, { type: 'transferDone', transferId: 'b', direction: 'outgoing', paths: [] }, yesterday);
+    expect(bytesToday(s.tickets, today)).toBe(10);
+  });
+});

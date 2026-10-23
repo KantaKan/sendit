@@ -16,7 +16,7 @@ clipboard-rs = "0.3"
 gethostname = "0.5"
 sendit-core = { path = "../../crates/core" }
 serde = { version = "1", features = ["derive"] }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"

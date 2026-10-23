@@ -67,6 +67,7 @@ export function createMockBridge(seed: Seed = {}) {
     pickFiles: async () => seed.pickedFiles ?? [],
     pickFolder: async () => seed.pickedFolder ?? null,
     reveal: async (p) => rec('reveal', p),
+    fileUrl: (p) => `mock-file://${p}`,
     notify: (t, b) => rec('notify', t, b),
     paste: async (fp) => {
       rec('paste', fp);

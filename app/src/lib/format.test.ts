@@ -35,3 +35,26 @@ test('primaryIp prefers home-network addresses over virtual and link-local ones'
   expect(primaryIp(['172.20.1.1'])).toBe('172.20.1.1');
   expect(primaryIp([])).toBeNull();
 });
+
+import { bytesOf, eta, isImage, summarize } from './format';
+import { file } from './fixtures';
+
+test('bytesOf uses the unit of the total', () => {
+  expect(bytesOf(204_000_000, 318_000_000)).toBe('204 of 318 MB');
+  expect(bytesOf(1_500_000, 3_900_000)).toBe('1.5 of 3.9 MB');
+});
+
+test('eta', () => {
+  expect(eta(42)).toBe('0:42');
+  expect(eta(185)).toBe('3:05');
+  expect(eta(3723)).toBe('1:02:03');
+  expect(eta(Infinity)).toBe('--');
+});
+
+test('isImage and summarize', () => {
+  expect(isImage('IMG.JPG')).toBe(true);
+  expect(isImage('a.pdf')).toBe(false);
+  expect(summarize([file('a.jpg', 1), file('b.png', 1), file('c.mp4', 1)])).toBe('2 photos, 1 video');
+  expect(summarize([file('a.pdf', 1), file('b.zip', 1)])).toBe('2 files');
+  expect(summarize([file('a.heic', 1), file('b.pdf', 1)])).toBe('1 photo, 1 file');
+});

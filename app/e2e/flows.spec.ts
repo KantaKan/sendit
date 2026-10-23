@@ -30,9 +30,9 @@ test('flow A: accept an incoming file and reveal it', async ({ page }) => {
   expect(r.args.slice(0, 2)).toEqual(['r1', true]);
   await emit(page, { type: 'transferStarted', transferId: 't1', requestId: 'r1', direction: 'incoming', peer: PIXEL.fingerprint, files: [FILE], total: FILE.size, sources: [] });
   await emit(page, { type: 'progress', transferId: 't1', direction: 'incoming', bytes: FILE.size / 2, total: FILE.size });
-  await expect(page.getByText('50%')).toBeVisible();
+  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50');
   await emit(page, { type: 'transferDone', transferId: 't1', direction: 'incoming', paths: ['C:\\Users\\me\\Downloads\\sendit\\IMG_2044.jpg'] });
-  await page.getByRole('button', { name: 'Show in folder' }).click();
+  await page.getByRole('button', { name: 'Show' }).click();
   expect((await calls(page, 'reveal'))[0].args[0]).toContain('IMG_2044.jpg');
 });
 
@@ -80,7 +80,7 @@ test('a text message from LocalSend shows as text', async ({ page }) => {
   await boot(page, { devices: [PIXEL] });
   await emit(page, { type: 'messageReceived', from: PIXEL, text: 'hello from my phone', senderVerified: true });
   await expect(page.getByText('hello from my phone')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Show in folder' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Show' })).toHaveCount(0);
 });
 
 test('Ctrl+V pastes to the open conversation', async ({ page }) => {

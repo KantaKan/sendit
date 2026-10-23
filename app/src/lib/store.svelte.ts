@@ -134,6 +134,7 @@ export function createStore(bridge: Bridge) {
       if (t.text !== undefined) bridge.sendText(t.peer, t.text).catch(fail);
       else if (t.sources.length) bridge.sendFiles(t.peer, t.sources).catch(fail);
     },
+    fileUrl: (path: string) => bridge.fileUrl(path),
     reveal(path: string) { bridge.reveal(path).catch(fail); },
     refresh() {
       searching = true;
