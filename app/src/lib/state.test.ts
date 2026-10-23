@@ -121,7 +121,7 @@ describe('local marks', () => {
 describe('selectors', () => {
   test('seenBefore lists known devices that are not nearby', () => {
     let s = apply(initial(), { type: 'deviceUpdated', device: PIXEL }, 1);
-    s = { ...s, known: [{ fingerprint: PIXEL.fingerprint, alias: 'Pixel 8', trust: 'known' }, { fingerprint: 'B'.repeat(64), alias: 'Lab PC', trust: 'known' }] };
+    s = { ...s, known: [{ fingerprint: PIXEL.fingerprint, alias: 'Pixel 8', trust: 'known', autoAccept: false }, { fingerprint: 'B'.repeat(64), alias: 'Lab PC', trust: 'known', autoAccept: false }] };
     expect(seenBefore(s).map((k) => k.alias)).toEqual(['Lab PC']);
   });
 

@@ -11,7 +11,7 @@ test('lists nearby and seen-before devices and selects on click', async () => {
     props: {
       me: null,
       nearby: [pixel, suspect],
-      seenBefore: [{ fingerprint: 'B'.repeat(64), alias: 'Lab PC', trust: 'known' }],
+      seenBefore: [{ fingerprint: 'B'.repeat(64), alias: 'Lab PC', trust: 'known', autoAccept: false }],
       selected: pixel.fingerprint,
       searching: false,
       waiting: { ['D'.repeat(64)]: 2 },

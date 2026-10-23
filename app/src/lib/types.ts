@@ -16,6 +16,15 @@ export interface KnownDevice {
   fingerprint: string;
   alias: string;
   trust: Trust;
+  autoAccept: boolean;
+}
+
+/** settings.json; alias, downloadDir and pin live in the core. */
+export interface Settings {
+  alias: string;
+  downloadDir: string;
+  pin: string | null;
+  closeToTray: boolean;
 }
 
 export interface FileMeta {

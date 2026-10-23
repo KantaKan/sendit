@@ -1,4 +1,5 @@
-import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted } from './types';
+import type { Ticket } from './state';
+import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted, Settings } from './types';
 
 export type DragState = { kind: 'enter' } | { kind: 'leave' } | { kind: 'drop'; paths: string[] };
 
@@ -25,6 +26,16 @@ export interface Bridge {
   notify(title: string, body: string): void;
   /** Send whatever is on the OS clipboard to this device. */
   paste(fingerprint: string): Promise<Pasted>;
+  settings(): Promise<Settings>;
+  /** Resolves with the saved (normalized) settings; rejects with a message for the user. */
+  updateSettings(s: Settings): Promise<Settings>;
+  setAutoAccept(fingerprint: string, on: boolean): Promise<void>;
+  /** Start on sign-in, read back from the OS. */
+  autostart(): Promise<boolean>;
+  setAutostart(on: boolean): Promise<void>;
+  /** Finished tickets from history.json, oldest first. */
+  loadHistory(): Promise<Ticket[]>;
+  saveHistory(items: Ticket[]): Promise<void>;
   /** Errors from work that finished after its command returned. */
   onAppError(cb: (message: string) => void): () => void;
   onEvent(cb: (e: CoreEvent) => void): () => void;
