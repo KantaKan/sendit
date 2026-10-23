@@ -56,7 +56,7 @@
 </article>
 
 <style>
-  .now { display: grid; grid-template-columns: 56px 1fr auto; gap: 14px; align-items: center; background: var(--surface); border-radius: 16px; padding: 12px 14px; animation: enter 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+  .now { display: grid; grid-template-columns: 56px 1fr auto; gap: 14px; align-items: center; background: var(--surface); border-radius: 16px; padding: 12px 14px; animation: enter 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
   .tile { position: relative; width: 56px; height: 56px; }
   .tile img, .tile span, .quote { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; display: grid; place-items: center; background: #2a2a30; font: 600 11px var(--mono); color: var(--muted); }
   .quote { font: 22px var(--sans); }

@@ -66,7 +66,7 @@
 </div>
 
 <style>
-  .row { position: relative; display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center; padding: 9px 8px; margin: 0 -8px; border-radius: 12px; transition: background 0.15s; animation: from-right 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+  .row { position: relative; display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: center; padding: 9px 8px; margin: 0 -8px; border-radius: 12px; transition: background 0.15s; animation: from-right 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
   .row.in { animation-name: from-left; }
   .row:hover, .row:focus-within { background: var(--surface); }
   .tile { width: 44px; height: 44px; border-radius: 11px; object-fit: cover; display: grid; place-items: center; background: #2a2a30; font: 600 10.5px var(--mono); color: var(--muted); }

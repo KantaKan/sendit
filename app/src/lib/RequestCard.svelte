@@ -38,9 +38,9 @@
 </article>
 
 <style>
-  .req { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; background: var(--surface); border: 1px solid #3ecf8e33; border-radius: 16px; padding: 12px 14px; animation: enter 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+  .req { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; background: var(--surface); border: 1px solid #3ecf8e33; border-radius: 16px; padding: 12px 14px; animation: enter 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
   .fan { position: relative; width: 72px; height: 52px; }
-  .fan span { position: absolute; top: 4px; width: 44px; height: 44px; border-radius: 10px; border: 2px solid var(--surface); background: #2a2a30; display: grid; place-items: center; font: 600 10px var(--mono); color: var(--muted); transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+  .fan span { position: absolute; top: 4px; width: 44px; height: 44px; border-radius: 10px; border: 2px solid var(--surface); background: #2a2a30; display: grid; place-items: center; font: 600 10px var(--mono); color: var(--muted); transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
   .fan span:nth-child(1) { left: 0; transform: rotate(-8deg); }
   .fan span:nth-child(2) { left: 14px; }
   .fan span:nth-child(3) { left: 28px; transform: rotate(8deg); }
