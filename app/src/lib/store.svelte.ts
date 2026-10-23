@@ -15,6 +15,9 @@ export function createStore(bridge: Bridge) {
   let notice = $state<string | null>(null);
   let settings = $state<Settings | null>(null);
   let page = $state<'chat' | 'settings'>('chat');
+  // Saves run one after another, each merged into the newest saved settings,
+  // so a quick second change can't undo the first.
+  let settingsQueue: Promise<unknown> = Promise.resolve();
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
   const showNotice = (text: string) => {
     notice = text;
@@ -149,15 +152,19 @@ export function createStore(bridge: Bridge) {
     closeSettings() { page = 'chat'; },
     select(fp: string) { selected = fp; page = 'chat'; },
     /** Saves one change. Resolves to the message to show under that field, or null. */
-    async updateSettings(change: Partial<Settings>): Promise<string | null> {
-      if (!settings) return null;
-      try {
-        settings = await bridge.updateSettings({ ...settings, ...change });
-        if (me) me = { ...me, alias: settings.alias, downloadDir: settings.downloadDir };
-        return null;
-      } catch (e) {
-        return String(e);
-      }
+    updateSettings(change: Partial<Settings>): Promise<string | null> {
+      const run = settingsQueue.then(async () => {
+        if (!settings) return null;
+        try {
+          settings = await bridge.updateSettings({ ...settings, ...change });
+          if (me) me = { ...me, alias: settings.alias, downloadDir: settings.downloadDir };
+          return null;
+        } catch (e) {
+          return String(e);
+        }
+      });
+      settingsQueue = run;
+      return run;
     },
     setAutoAccept(fp: string, on: boolean) {
       bridge.setAutoAccept(fp, on).then(refreshKnown).catch(fail);

@@ -47,12 +47,15 @@
     pinOn = false;
     pin = '';
     if (s?.pin !== null) pinError = await store.updateSettings({ pin: null });
+    // A failed save leaves the PIN active: show it as on.
+    if (pinError) pinOn = s?.pin !== null;
   }
   async function savePin() {
     const v = pin.trim() || null;
     if (!v) pinOn = false;
     if (v === (s?.pin ?? null)) return;
     pinError = await store.updateSettings({ pin: v });
+    if (pinError) pinOn = s?.pin !== null || v !== null;
   }
   const enterBlurs = (e: KeyboardEvent) => {
     if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();

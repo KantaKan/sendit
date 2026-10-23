@@ -184,3 +184,12 @@ test('clear history forgets finished items and saves', async () => {
     vi.useRealTimers();
   }
 });
+
+test('two quick settings changes both stick', async () => {
+  const { m, store } = await setup();
+  const a = store.updateSettings({ alias: 'Studio' });
+  const b = store.updateSettings({ closeToTray: false });
+  await Promise.all([a, b]);
+  expect(store.settings).toMatchObject({ alias: 'Studio', closeToTray: false });
+  expect(m.calls.filter((c) => c.name === 'updateSettings').at(-1)!.args[0]).toMatchObject({ alias: 'Studio', closeToTray: false });
+});

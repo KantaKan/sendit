@@ -106,3 +106,13 @@ test('clear history asks first', async () => {
   await fireEvent.click(screen.getByRole('button', { name: 'Yes, clear' }));
   expect(store.state.tickets).toHaveLength(0);
 });
+
+test('a PIN that could not be turned off still shows as on', async () => {
+  await setup({ settings: { pin: '1234' }, settingsError: "Can't use D:\gone" });
+  const sw = screen.getByRole('switch', { name: 'Require a PIN' });
+  expect(sw).toHaveAttribute('aria-checked', 'true');
+  await fireEvent.click(sw);
+  await tick();
+  expect(sw).toHaveAttribute('aria-checked', 'true');
+  expect(screen.getByText("Can't use D:\gone")).toBeInTheDocument();
+});
