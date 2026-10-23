@@ -1,3 +1,4 @@
+pub mod atomic;
 pub mod error;
 pub mod events;
 pub mod identity;
@@ -12,6 +13,7 @@ mod receive;
 mod send;
 mod server;
 
+pub use atomic::write_atomic;
 pub use error::{Error, Result};
 pub use events::{Device, Direction, Event, FailReason, IncomingRequest};
 pub use node::{Config, Decision, Node};
