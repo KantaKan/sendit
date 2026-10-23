@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { flip } from 'svelte/animate';
+  import { ease, leave, reduce } from './motion';
   import Avatar from './Avatar.svelte';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import IdentityPanel from './IdentityPanel.svelte';
@@ -25,7 +27,6 @@
 
   const destLabel = $derived(me ? lastTwo(me.downloadDir) : 'Downloads');
   const sub = $derived([device.addr.split(':')[0], device.deviceModel].filter(Boolean).join('  '));
-  let skipped = $state(new Set<string>());
 
   const sec = $derived(sections(tickets));
   const PEEK_W = 220;
@@ -82,12 +83,12 @@
       onblock={() => store.block(device.fingerprint)}
       ontrust={() => store.trustNewKey(device.fingerprint)}
     />
-  {:else if device.isSendit && device.trust === 'known' && me && !skipped.has(device.fingerprint)}
+  {:else if device.isSendit && device.trust === 'known' && me && !store.verifySkipped(device.fingerprint)}
     <VerifyPanel
       theirs={device.fingerprint}
       mine={me.fingerprint}
       onyes={() => store.verify(device.fingerprint)}
-      onskip={() => (skipped = new Set(skipped).add(device.fingerprint))}
+      onskip={() => store.skipVerify(device.fingerprint)}
     />
   {/if}
   <div class="list">
@@ -105,7 +106,7 @@
         />
       {/each}
       {#if sec.now.length}
-        <p class="label"><span class="live"></span>Now</p>
+        <p class="label"><span class="live loop"></span>Now</p>
         {#each sec.now as t (t.key)}
           <NowCard ticket={t} peerAlias={device.alias} thumb={thumbFor(t)} oncancel={() => t.transferId && store.cancel(t.transferId)} />
         {/each}
@@ -114,7 +115,9 @@
         <p class="label">Earlier</p>
         <div class="rows" role="list">
           {#each sec.history as t (t.key)}
-            <HistoryRow ticket={t} thumb={thumbFor(t)} onretry={() => store.retry(t)} onreveal={store.reveal} onpeek={showPeek} onmenu={openMenu} />
+            <div animate:flip={{ duration: reduce ? 0 : 260, easing: ease }} out:leave>
+              <HistoryRow ticket={t} thumb={thumbFor(t)} onretry={() => store.retry(t)} onreveal={store.reveal} onpeek={showPeek} onmenu={openMenu} />
+            </div>
           {/each}
         </div>
       {/if}
@@ -152,7 +155,7 @@
   .zone { margin: auto; width: min(360px, 100%); padding: 40px 22px; border: 1px dashed #ffffff1f; border-radius: 16px; text-align: center; color: var(--muted); font-size: 14px; transition: border-color 0.2s, color 0.2s, background 0.2s; }
   .zone.hot { border-color: var(--accent); color: var(--text); background: #3ecf8e0d; }
   kbd { font: 11px var(--mono); background: var(--surface-2); color: var(--text); border: 1px solid #3a3a40; border-bottom-width: 2px; border-radius: 6px; padding: 2px 7px; margin: 0 1px; }
-  .notice { color: var(--text); }
+  .notice { display: inline-block; color: var(--text); animation: rise 0.22s var(--ease); }
   footer kbd { font-size: 10.5px; padding: 1px 6px; color: var(--muted); }
   footer button { background: var(--surface); border: 0; border-radius: 8px; padding: 6px 12px; color: var(--text); font-size: 12px; }
 </style>

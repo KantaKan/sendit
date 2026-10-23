@@ -16,6 +16,15 @@
   let pinError = $state<string | null>(null);
   let autostart = $state(false);
   let confirming = $state(false);
+  // "Saved" next to the field that was just saved.
+  let saved = $state<'alias' | 'dir' | 'pin' | null>(null);
+  let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  function ack(field: 'alias' | 'dir' | 'pin', err: string | null) {
+    if (err) return;
+    saved = field;
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => (saved = null), 1400);
+  }
 
   // Fields show the saved values whenever those change (load, or a save elsewhere).
   $effect(() => {
@@ -34,10 +43,13 @@
   async function saveAlias() {
     if (!s || alias === s.alias) return;
     aliasError = await store.updateSettings({ alias });
+    ack('alias', aliasError);
   }
   async function changeDir() {
     const dir = await store.pickFolder();
-    if (dir) dirError = await store.updateSettings({ downloadDir: dir });
+    if (!dir) return;
+    dirError = await store.updateSettings({ downloadDir: dir });
+    ack('dir', dirError);
   }
   async function togglePin() {
     if (!pinOn) {
@@ -55,6 +67,7 @@
     if (!v) pinOn = false;
     if (v === (s?.pin ?? null)) return;
     pinError = await store.updateSettings({ pin: v });
+    if (v) ack('pin', pinError);
     if (pinError) pinOn = s?.pin !== null || v !== null;
   }
   const enterBlurs = (e: KeyboardEvent) => {
@@ -70,6 +83,8 @@
       <div class="field">
         <div class="row">
           <div>Name<small>What phones and computers see</small></div>
+          <span class="acked">
+          {#if saved === 'alias'}<span class="ok" role="status">Saved</span>{/if}
           <input
             class="txt"
             aria-label="Device name"
@@ -79,6 +94,7 @@
             onblur={saveAlias}
             onkeydown={enterBlurs}
           />
+          </span>
         </div>
         {#if aliasError}<p class="err" role="alert">{aliasError}</p>{/if}
         {#if store.me}
@@ -92,7 +108,10 @@
       <div class="field">
         <div class="row">
           <div>Save to<small class="mono">{s.downloadDir}</small></div>
-          <button class="btn" onclick={changeDir}>Change…</button>
+          <span class="acked">
+            {#if saved === 'dir'}<span class="ok" role="status">Saved</span>{/if}
+            <button class="btn" onclick={changeDir}>Change…</button>
+          </span>
         </div>
         {#if dirError}<p class="err" role="alert">{dirError}</p>{/if}
         <div class="row">
@@ -102,7 +121,10 @@
         {#if pinOn}
           <div class="row">
             <div>PIN</div>
-            <input class="txt short mono" aria-label="PIN" bind:value={pin} onblur={savePin} onkeydown={enterBlurs} />
+            <span class="acked">
+              {#if saved === 'pin'}<span class="ok" role="status">Saved</span>{/if}
+              <input class="txt short mono" aria-label="PIN" bind:value={pin} onblur={savePin} onkeydown={enterBlurs} />
+            </span>
           </div>
         {/if}
         {#if pinError}<p class="err" role="alert">{pinError}</p>{/if}
@@ -189,6 +211,9 @@
   .txt.short { width: 120px; }
   .txt:focus { outline: none; border-color: var(--accent); }
   .txt[aria-invalid='true'] { border-color: var(--danger); }
+  .acked { position: relative; display: flex; flex: none; }
+  .ok { position: absolute; right: calc(100% + 10px); top: 50%; translate: 0 -50%; font-size: 12.5px; color: var(--accent); white-space: nowrap; animation: ack 1.4s var(--ease) forwards; pointer-events: none; }
+  @keyframes ack { 0% { opacity: 0; transform: translateX(calc(4px * var(--move))); } 15%, 75% { opacity: 1; transform: none; } 100% { opacity: 0; } }
   .err { margin: -4px 0 0; font-size: 12.5px; color: var(--danger-text); text-align: right; }
   .btn { flex: none; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 500; }
   .btn.danger { background: var(--danger-bg); color: var(--danger-text); }

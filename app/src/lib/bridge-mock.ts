@@ -12,6 +12,8 @@ export interface Seed {
   respondError?: string;
   /** addPeer() resolves with this device, otherwise rejects */
   addPeer?: Device;
+  /** scan() resolves after this many ms (default 1500) */
+  scanDelayMs?: number;
   /** paste() resolves with this */
   pasted?: Pasted;
   settings?: Partial<Settings>;
@@ -83,6 +85,8 @@ export function createMockBridge(seed: Seed = {}) {
     announce: async () => rec('announce'),
     scan: async () => {
       rec('scan');
+      // A real subnet scan takes seconds; keep the busy state visible in dev:mock.
+      await new Promise((r) => setTimeout(r, seed.scanDelayMs ?? 1500));
       return [];
     },
     addPeer: async (addr) => {

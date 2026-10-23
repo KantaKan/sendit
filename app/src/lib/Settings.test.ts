@@ -116,3 +116,12 @@ test('a PIN that could not be turned off still shows as on', async () => {
   expect(sw).toHaveAttribute('aria-checked', 'true');
   expect(screen.getByText("Can't use D:\gone")).toBeInTheDocument();
 });
+
+test('a saved change says so next to the field', async () => {
+  await setup();
+  const name = screen.getByLabelText('Device name');
+  await fireEvent.input(name, { target: { value: 'Studio PC' } });
+  await fireEvent.blur(name);
+  await tick();
+  expect(screen.getByText('Saved')).toBeInTheDocument();
+});

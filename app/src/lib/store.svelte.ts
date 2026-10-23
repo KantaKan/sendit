@@ -10,6 +10,9 @@ export function createStore(bridge: Bridge) {
   let me = $state<AppInfo | null>(null);
   let selected = $state<string | null>(null);
   let searching = $state(false);
+  let ready = $state(false);
+  /** sendit devices whose face check the user skipped this run */
+  let skipped = $state(new Set<string>());
   let dragging = $state(false);
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
@@ -113,6 +116,8 @@ export function createStore(bridge: Bridge) {
     get me() { return me; },
     get selected() { return selected; },
     get searching() { return searching; },
+    /** first load finished (or failed): the UI can fade in */
+    get ready() { return ready; },
     get dragging() { return dragging; },
     get error() { return error; },
     /** short-lived hint shown in the conversation footer */
@@ -142,6 +147,8 @@ export function createStore(bridge: Bridge) {
           state = { ...state, known };
         } catch (e) {
           fail(e);
+        } finally {
+          ready = true;
         }
       })();
       bridge
@@ -256,6 +263,8 @@ export function createStore(bridge: Bridge) {
     trustNewKey(fp: string) { bridge.trustNewKey(fp).catch(fail); },
     block(fp: string) { bridge.block(fp).catch(fail); },
     dismissError() { error = null; },
+    verifySkipped: (fp: string) => skipped.has(fp),
+    skipVerify(fp: string) { skipped = new Set(skipped).add(fp); },
     clearHistory() {
       state = clearFinished(state);
       persist();

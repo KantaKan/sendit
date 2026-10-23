@@ -20,6 +20,8 @@
   let addr = $state('');
   let addError = $state<string | null>(null);
   let adding = $state(false);
+  /** which button started the current search */
+  let which = $state<'refresh' | 'scan' | null>(null);
 
   async function add(e: SubmitEvent) {
     e.preventDefault();
@@ -37,8 +39,9 @@
 </script>
 
 <section class="backdrop">
-  <div class="rings" aria-hidden="true">
-    <span class="ring"></span><span class="ring"></span><span class="ring"></span>
+  <div class="rings" class:busy={searching} aria-hidden="true">
+    <span class="ring loop"></span><span class="ring loop"></span><span class="ring loop"></span>
+    <span class="ring fast loop"></span><span class="ring fast loop"></span><span class="ring fast loop"></span>
     {#if me}<img class="me" src={avatarUri(me.fingerprint)} alt="" />{/if}
   </div>
   <div class="content">
@@ -51,7 +54,7 @@
         <div class="pass">
           <div class="l"><b>{me.alias}</b><span class="mono meta">{shortFp(me.fingerprint)}</span></div>
           <div class="r">
-            <span class="live mono"><i></i>VISIBLE</span>
+            <span class="live mono"><i class="loop"></i>VISIBLE</span>
             {#if ip}<span class="mono meta">{ip}</span>{/if}
           </div>
         </div>
@@ -62,8 +65,12 @@
         <li><span>3</span>On iPhone, keep LocalSend on screen</li>
       </ol>
       <div class="row">
-        <button class="primary" onclick={onrefresh} disabled={searching}>Refresh</button>
-        <button class="ghost" onclick={onscan} disabled={searching}>Scan network</button>
+        <button class="primary" onclick={() => { which = 'refresh'; onrefresh(); }} disabled={searching}>
+          {searching && which === 'refresh' ? 'Looking…' : 'Refresh'}
+        </button>
+        <button class="ghost wide" onclick={() => { which = 'scan'; onscan(); }} disabled={searching}>
+          {searching && which === 'scan' ? 'Scanning…' : 'Scan network'}
+        </button>
         <button class="link mono" onclick={() => (showAdd = !showAdd)} aria-expanded={showAdd}>add by IP</button>
       </div>
       {#if showAdd}
@@ -82,13 +89,19 @@
 </section>
 
 <style>
-  .backdrop { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; align-items: center; }
+  .backdrop { position: relative; flex: 1; min-height: 0; overflow: clip; display: flex; align-items: center; }
   .rings { position: absolute; right: -160px; top: 50%; width: 760px; height: 760px; margin-top: -380px; pointer-events: none; }
   .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px solid #3ecf8e33; animation: pulse 3.6s ease-out infinite; }
   .ring:nth-child(2) { animation-delay: 1.2s; }
   .ring:nth-child(3) { animation-delay: 2.4s; }
   @keyframes pulse { from { transform: scale(0.2); opacity: 1; } to { transform: scale(1); opacity: 0; } }
-  .me { position: absolute; left: 50%; top: 50%; width: 84px; height: 84px; margin: -42px; border-radius: 26px; box-shadow: 0 0 0 8px var(--bg); background: var(--surface); }
+  /* Searching: a faster, brighter wave over the idle one, faded in and out. */
+  .ring.fast { border-color: #3ecf8e80; animation-duration: 1.2s; opacity: 0; transition: opacity 0.4s var(--ease); animation-play-state: paused; }
+  .ring.fast:nth-child(5) { animation-delay: 0.4s; }
+  .ring.fast:nth-child(6) { animation-delay: 0.8s; }
+  .busy .ring.fast { opacity: 1; animation-play-state: running; }
+  .me { position: absolute; left: 50%; top: 50%; width: 84px; height: 84px; margin: -42px; border-radius: 26px; box-shadow: 0 0 0 8px var(--bg); background: var(--surface); transition: box-shadow 0.4s var(--ease); }
+  .busy .me { box-shadow: 0 0 0 8px var(--bg), 0 0 0 10px #3ecf8e66; }
   .content { position: relative; display: flex; flex-direction: column; gap: 20px; padding: 0 56px; max-width: 540px; }
   h2 { margin: 0; font-size: 40px; line-height: 1.04; letter-spacing: -0.04em; }
   .pass { display: grid; grid-template-columns: 1fr auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
@@ -105,7 +118,8 @@
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 12px; padding: 11px 20px; font-weight: 500; }
   .ghost { background: var(--surface-2); border: 0; border-radius: 12px; padding: 11px 20px; }
-  .primary:active, .ghost:active { transform: translateY(1px); }
+  /* keeps its width while the label reads Scanning… */
+  .wide { min-width: 9.5em; }
   .link { background: none; border: 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
   form { display: flex; flex-direction: column; gap: 8px; }
   label { font-size: 13px; color: var(--muted); }

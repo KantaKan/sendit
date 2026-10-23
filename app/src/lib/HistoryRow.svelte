@@ -109,7 +109,7 @@
   .when { font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
   .link { background: none; border: 0; padding: 0; font-size: 12.5px; color: var(--muted); }
   .link:hover { color: var(--text); }
-  @keyframes from-right { from { opacity: 0; transform: translateX(24px); } }
-  @keyframes from-left { from { opacity: 0; transform: translateX(-24px); } }
+  @keyframes from-right { from { opacity: 0; transform: translateX(calc(24px * var(--move))); } }
+  @keyframes from-left { from { opacity: 0; transform: translateX(calc(-24px * var(--move))); } }
   @keyframes flash { 0% { opacity: 0; transform: scale(0.6); } 25% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
 </style>

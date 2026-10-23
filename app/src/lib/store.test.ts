@@ -206,3 +206,19 @@ test('a device that is not nearby opens with its history, and sending to it expl
   expect(store.error).toBe('Lab PC is not nearby right now.');
   expect(m.calls.filter((c) => c.name === 'sendFiles' || c.name === 'paste')).toEqual([]);
 });
+
+test('the store is ready once this device and the nearby list have loaded', async () => {
+  const m = createMockBridge({ devices: [PIXEL] });
+  const store = createStore(m.bridge);
+  expect(store.ready).toBe(false);
+  store.start();
+  await tick();
+  expect(store.ready).toBe(true);
+});
+
+test('skipping face verification is remembered across conversations', async () => {
+  const { store } = await setup();
+  expect(store.verifySkipped(PIXEL.fingerprint)).toBe(false);
+  store.skipVerify(PIXEL.fingerprint);
+  expect(store.verifySkipped(PIXEL.fingerprint)).toBe(true);
+});

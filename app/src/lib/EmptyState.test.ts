@@ -47,3 +47,15 @@ test('with devices but none selected, asks to pick one', () => {
   render(EmptyState, { props: props({ hasDevices: true }) });
   expect(screen.getByRole('heading', { name: 'Pick a device on the left' })).toBeInTheDocument();
 });
+
+test('the button that started a search says it is working, and the radar speeds up', async () => {
+  const { rerender, container } = render(EmptyState, { props: props() });
+  await fireEvent.click(screen.getByRole('button', { name: 'Scan network' }));
+  await rerender(props({ searching: true }));
+  expect(screen.getByRole('button', { name: 'Scanning…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
+  expect(container.querySelector('.rings.busy')).not.toBeNull();
+  await rerender(props({ searching: false }));
+  expect(screen.getByRole('button', { name: 'Scan network' })).toBeEnabled();
+  expect(container.querySelector('.rings.busy')).toBeNull();
+});

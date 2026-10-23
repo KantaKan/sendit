@@ -14,7 +14,10 @@
   // The bridge is fixed for the app's lifetime; read it once.
   // svelte-ignore state_referenced_locally
   const store = createStore(bridge);
+  // Fade the window in once it has something to show; never wait longer than this.
+  let late = $state(false);
   onMount(() => {
+    const lateTimer = setTimeout(() => (late = true), 600);
     const stop = store.start();
     // Ctrl/Cmd+V anywhere except text fields sends the clipboard.
     const onKey = (e: KeyboardEvent) => {
@@ -35,6 +38,7 @@
     };
     window.addEventListener('contextmenu', onContext);
     return () => {
+      clearTimeout(lateTimer);
       stop();
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('contextmenu', onContext);
@@ -42,6 +46,8 @@
   });
 
   const near = $derived(nearby(store.state));
+  // Each screen change replays a short entrance on the new content.
+  const view = $derived(store.page === 'settings' ? 'settings' : (store.selectedDevice?.fingerprint ?? 'home'));
   const waiting = $derived(
     store.state.tickets.reduce<Record<string, number>>((acc, t) => {
       if (t.status === 'pending') acc[t.peer] = (acc[t.peer] ?? 0) + 1;
@@ -50,7 +56,7 @@
   );
 </script>
 
-<div class="shell">
+<div class="shell" class:ready={store.ready || late}>
   <Sidebar
     me={store.me}
     nearby={near}
@@ -71,6 +77,8 @@
         <button onclick={store.dismissError}>Dismiss</button>
       </div>
     {/if}
+    {#key view}
+    <div class="view">
     {#if store.page === 'settings'}
       <Settings {store} />
     {:else if store.selectedDevice}
@@ -92,13 +100,17 @@
         onaddpeer={store.addPeer}
       />
     {/if}
+    </div>
+    {/key}
   </main>
   <DropOverlay visible={store.dragging} target={store.selectedDevice?.alias ?? null} />
 </div>
 
 <style>
-  .shell { display: grid; grid-template-columns: 240px 1fr; height: 100%; }
+  .shell { display: grid; grid-template-columns: 240px 1fr; height: 100%; opacity: 0; transition: opacity 0.24s var(--ease); }
+  .shell.ready { opacity: 1; }
+  .view { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: rise 0.2s var(--ease); }
   main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-  .error { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 12px 20px 0; padding: 10px 14px; border-radius: 12px; background: var(--danger-bg); border: 1px solid #e5533d66; font-size: 13.5px; }
+  .error { animation: drop 0.22s var(--ease); display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 12px 20px 0; padding: 10px 14px; border-radius: 12px; background: var(--danger-bg); border: 1px solid #e5533d66; font-size: 13.5px; }
   .error button { background: none; border: 0; color: var(--danger-text); }
 </style>
