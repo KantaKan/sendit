@@ -19,7 +19,7 @@ const calls = (page: Page, name: string): Promise<Call[]> =>
 
 test('empty state explains how devices appear', async ({ page }) => {
   await boot(page, {});
-  await expect(page.getByText(/Devices on the same Wi-Fi show up here/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Looking on this Wi-Fi/ })).toBeVisible();
 });
 
 test('flow A: accept an incoming file and reveal it', async ({ page }) => {
@@ -81,4 +81,12 @@ test('a text message from LocalSend shows as text', async ({ page }) => {
   await emit(page, { type: 'messageReceived', from: PIXEL, text: 'hello from my phone', senderVerified: true });
   await expect(page.getByText('hello from my phone')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Show in folder' })).toHaveCount(0);
+});
+
+test('Ctrl+V pastes to the open conversation', async ({ page }) => {
+  await boot(page, { devices: [PIXEL], pasted: { kind: 'files', count: 2, name: 'a.pdf' } });
+  await page.getByRole('button', { name: /Pixel 8/ }).click();
+  await page.keyboard.press('Control+V');
+  await expect(page.getByText('Pasted 2 files to Pixel 8')).toBeVisible();
+  expect(await calls(page, 'paste')).toEqual([{ name: 'paste', args: [PIXEL.fingerprint] }]);
 });

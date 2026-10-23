@@ -1,5 +1,5 @@
 import type { Bridge, DragState } from './bridge';
-import type { AppInfo, CoreEvent, Device, KnownDevice } from './types';
+import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted } from './types';
 
 export interface Seed {
   info?: Partial<AppInfo>;
@@ -11,6 +11,8 @@ export interface Seed {
   respondError?: string;
   /** addPeer() resolves with this device, otherwise rejects */
   addPeer?: Device;
+  /** paste() resolves with this */
+  pasted?: Pasted;
 }
 
 export interface Call {
@@ -21,6 +23,7 @@ export interface Call {
 export function createMockBridge(seed: Seed = {}) {
   const eventSubs = new Set<(e: CoreEvent) => void>();
   const dragSubs = new Set<(d: DragState) => void>();
+  const errorSubs = new Set<(m: string) => void>();
   const calls: Call[] = [];
   const rec = (name: string, ...args: unknown[]) => {
     calls.push({ name, args });
@@ -31,6 +34,7 @@ export function createMockBridge(seed: Seed = {}) {
     port: 53317,
     portFallback: false,
     downloadDir: 'C:\\Users\\me\\Downloads\\sendit',
+    addresses: ['192.168.1.101'],
     ...seed.info,
   };
   const bridge: Bridge = {
@@ -63,6 +67,14 @@ export function createMockBridge(seed: Seed = {}) {
     pickFolder: async () => seed.pickedFolder ?? null,
     reveal: async (p) => rec('reveal', p),
     notify: (t, b) => rec('notify', t, b),
+    paste: async (fp) => {
+      rec('paste', fp);
+      return seed.pasted ?? { kind: 'empty' };
+    },
+    onAppError: (cb) => {
+      errorSubs.add(cb);
+      return () => errorSubs.delete(cb);
+    },
     onEvent: (cb) => {
       eventSubs.add(cb);
       return () => eventSubs.delete(cb);
@@ -77,6 +89,7 @@ export function createMockBridge(seed: Seed = {}) {
     calls,
     emit: (e: CoreEvent) => eventSubs.forEach((cb) => cb(e)),
     drag: (d: DragState) => dragSubs.forEach((cb) => cb(d)),
+    appError: (m: string) => errorSubs.forEach((cb) => cb(m)),
   };
 }
 

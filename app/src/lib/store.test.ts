@@ -81,3 +81,39 @@ test('incoming request notifies only when the window is in the background', asyn
   ]);
   focus.mockRestore();
 });
+
+test('paste with no device selected explains and sends nothing', async () => {
+  const { m, store } = await setup();
+  await store.paste();
+  expect(store.error).toBe('Pick a device first, then paste.');
+  expect(m.calls.filter((c) => c.name === 'paste')).toEqual([]);
+});
+
+test('paste sends to the open conversation and shows what went', async () => {
+  const { m, store } = await setup({ pasted: { kind: 'files', count: 2, name: 'a.pdf' } });
+  store.select(PIXEL.fingerprint);
+  await store.paste();
+  expect(m.calls).toContainEqual({ name: 'paste', args: [PIXEL.fingerprint] });
+  expect(store.toast).toBe('Pasted 2 files to Pixel 8');
+});
+
+test('paste toast wording per kind', async () => {
+  const cases = [
+    [{ kind: 'files', count: 1, name: 'a.pdf' }, 'Pasted a.pdf to Pixel 8'],
+    [{ kind: 'image', name: 's.png' }, 'Pasted a screenshot to Pixel 8'],
+    [{ kind: 'text', preview: 'hello' }, 'Sent "hello" to Pixel 8'],
+    [{ kind: 'empty' }, 'Nothing to paste. Copy a file, image or text first.'],
+  ] as const;
+  for (const [pasted, text] of cases) {
+    const { store } = await setup({ pasted });
+    store.select(PIXEL.fingerprint);
+    await store.paste();
+    expect(store.toast).toBe(text);
+  }
+});
+
+test('background send errors show up as the error banner', async () => {
+  const { m, store } = await setup();
+  m.appError('device is blocked');
+  expect(store.error).toBe('device is blocked');
+});

@@ -60,10 +60,10 @@
     </div>
   </article>
 {:else if ticket.status === 'message'}
-  <div class="row">
-    <article class="message" aria-label="Message">
+  <div class="row" class:out>
+    <article class="message" class:out aria-label="Message">
       <p class="text">{ticket.text}</p>
-      <p class="mono meta">{clock(ticket.at)}{ticket.senderVerified ? '' : '  unverified sender'}</p>
+      <p class="mono meta">{clock(ticket.at)}{out || ticket.senderVerified ? '' : '  unverified sender'}</p>
     </article>
     <div class="under"><button class="link" onclick={copy}>{copied ? 'Copied' : 'Copy'}</button></div>
   </div>
@@ -136,6 +136,8 @@
   .message { max-width: min(420px, 100%); background: var(--surface-2); border-radius: 14px 14px 14px 4px; padding: 10px 14px; }
   .message .text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; user-select: text; }
   .message .meta { margin: 6px 0 0; }
+  .message.out { background: var(--accent); color: var(--accent-ink); border-radius: 14px 14px 4px 14px; }
+  .message.out .meta { color: #0d1f16aa; }
   .reason { margin: 0; font-size: 12px; color: var(--danger-text); }
   .under { display: flex; gap: 12px; }
   .link { background: none; border: 0; padding: 0; font-size: 12px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }

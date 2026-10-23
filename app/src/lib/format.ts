@@ -26,3 +26,14 @@ export const shortFp = (fp: string) => fp.toLowerCase().slice(0, 12).replace(/(.
 
 /** Last two path segments, for compact labels like "Downloads/sendit". */
 export const lastTwo = (path: string) => path.split(/[\\/]+/).filter(Boolean).slice(-2).join('/');
+
+/** The address other devices most likely reach us on: home LAN ranges first,
+ * then anything that is not link-local (169.254.x). */
+export function primaryIp(addresses: string[]): string | null {
+  const rank = (ip: string) =>
+    ip.startsWith('192.168.') ? 0 : ip.startsWith('10.') ? 1 : ip.startsWith('169.254.') ? 3 : 2;
+  return [...addresses].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+}
+
+/** "Cmd" on macOS, "Ctrl" elsewhere. */
+export const modKey = () => (/Mac|iPhone|iPad/.test(navigator.userAgent) ? 'Cmd' : 'Ctrl');

@@ -2,7 +2,7 @@ import type { Bridge } from './bridge';
 import {
   apply, initial, markAccepting, markDeclined, markExpired, markPending, type State, type Ticket,
 } from './state';
-import type { AppInfo, CoreEvent, Device } from './types';
+import type { AppInfo, CoreEvent, Device, Pasted } from './types';
 
 export function createStore(bridge: Bridge) {
   let state = $state<State>(initial());
@@ -11,6 +11,13 @@ export function createStore(bridge: Bridge) {
   let searching = $state(false);
   let dragging = $state(false);
   let error = $state<string | null>(null);
+  let toast = $state<string | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  const showToast = (text: string) => {
+    toast = text;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast = null), 2500);
+  };
   const fail = (e: unknown) => {
     error = String(e);
   };
@@ -68,10 +75,14 @@ export function createStore(bridge: Bridge) {
     get searching() { return searching; },
     get dragging() { return dragging; },
     get error() { return error; },
+    get toast() { return toast; },
     get selectedDevice(): Device | null { return selected ? (state.devices[selected] ?? null) : null; },
 
     start(): () => void {
       const offEvent = bridge.onEvent(onEvent);
+      const offError = bridge.onAppError((m) => {
+        error = m;
+      });
       const offDrag = bridge.onDrag((d) => {
         dragging = d.kind === 'enter';
         if (d.kind === 'drop') send(d.paths);
@@ -89,10 +100,23 @@ export function createStore(bridge: Bridge) {
       return () => {
         offEvent();
         offDrag();
+        offError();
       };
     },
     select(fp: string) { selected = fp; },
     send,
+    async paste() {
+      if (!selected) {
+        error = 'Pick a device first, then paste.';
+        return;
+      }
+      const alias = state.devices[selected]?.alias ?? 'this device';
+      try {
+        showToast(pastedText(await bridge.paste(selected), alias));
+      } catch (e) {
+        fail(e);
+      }
+    },
     async chooseFiles() { send(await bridge.pickFiles()); },
     accept,
     async acceptElsewhere(requestId: string) {
@@ -136,3 +160,16 @@ export function createStore(bridge: Bridge) {
 }
 
 export type Store = ReturnType<typeof createStore>;
+
+function pastedText(p: Pasted, alias: string): string {
+  switch (p.kind) {
+    case 'files':
+      return p.count === 1 ? `Pasted ${p.name} to ${alias}` : `Pasted ${p.count} files to ${alias}`;
+    case 'image':
+      return `Pasted a screenshot to ${alias}`;
+    case 'text':
+      return `Sent "${p.preview}" to ${alias}`;
+    case 'empty':
+      return 'Nothing to paste. Copy a file, image or text first.';
+  }
+}

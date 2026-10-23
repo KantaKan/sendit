@@ -117,6 +117,22 @@ export function apply(s: State, e: CoreEvent, now: number): State {
       };
       return { ...s, devices, tickets: [...s.tickets, ticket] };
     }
+    case 'messageSent': {
+      const ticket: Ticket = {
+        key: `msg:${s.tickets.length}`,
+        peer: e.peer,
+        direction: 'outgoing',
+        files: [],
+        total: 0,
+        bytes: 0,
+        status: 'message',
+        paths: [],
+        sources: [],
+        text: e.text,
+        at: now,
+      };
+      return { ...s, tickets: [...s.tickets, ticket] };
+    }
     case 'requestExpired':
       return patch(
         s,

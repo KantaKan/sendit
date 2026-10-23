@@ -5,7 +5,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { Bridge, DragState } from './bridge';
-import type { AppInfo, CoreEvent, Device, KnownDevice } from './types';
+import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted } from './types';
 
 /** Tauri's listeners are async to attach; give the UI a sync unsubscribe. */
 function subscribe<T>(attach: (cb: T) => Promise<() => void>, cb: T): () => void {
@@ -47,6 +47,8 @@ export const tauriBridge: Bridge = {
       if (ok) sendNotification({ title, body });
     })();
   },
+  paste: (fingerprint) => invoke<Pasted>('paste', { fingerprint }),
+  onAppError: (cb) => subscribe((f: typeof cb) => listen<string>('app-error', (e) => f(e.payload)), cb),
   onEvent: (cb) => subscribe((f: typeof cb) => listen<CoreEvent>('core-event', (e) => f(e.payload)), cb),
   onDrag: (cb) =>
     subscribe(

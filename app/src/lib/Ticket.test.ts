@@ -78,3 +78,11 @@ test('message shows the text, not a file, and copies it', async () => {
   expect(writeText).toHaveBeenCalledWith('line one\nline two');
   expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
 });
+
+test('outgoing message sits on the right', () => {
+  const t: T = { ...base, direction: 'outgoing', status: 'message', text: 'sent text', files: [], total: 0, senderVerified: undefined };
+  const { container } = render(Ticket, { props: { ticket: t, destLabel: 'd', ...handlers() } });
+  expect(screen.getByText('sent text')).toBeInTheDocument();
+  expect(container.querySelector('.row.out')).not.toBeNull();
+  expect(screen.queryByText(/unverified/)).not.toBeInTheDocument();
+});

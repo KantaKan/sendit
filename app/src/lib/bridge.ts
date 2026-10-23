@@ -1,4 +1,4 @@
-import type { AppInfo, CoreEvent, Device, KnownDevice } from './types';
+import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted } from './types';
 
 export type DragState = { kind: 'enter' } | { kind: 'leave' } | { kind: 'drop'; paths: string[] };
 
@@ -20,6 +20,10 @@ export interface Bridge {
   pickFolder(): Promise<string | null>;
   reveal(path: string): Promise<void>;
   notify(title: string, body: string): void;
+  /** Send whatever is on the OS clipboard to this device. */
+  paste(fingerprint: string): Promise<Pasted>;
+  /** Errors from work that finished after its command returned. */
+  onAppError(cb: (message: string) => void): () => void;
   onEvent(cb: (e: CoreEvent) => void): () => void;
   onDrag(cb: (d: DragState) => void): () => void;
 }

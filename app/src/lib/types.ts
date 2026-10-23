@@ -55,6 +55,8 @@ export interface AppInfo {
   port: number;
   portFallback: boolean;
   downloadDir: string;
+  /** LAN IPv4 addresses */
+  addresses: string[];
 }
 
 export type CoreEvent =
@@ -63,6 +65,7 @@ export type CoreEvent =
   | { type: 'incomingRequest'; request: IncomingRequest }
   | { type: 'requestExpired'; requestId: string }
   | { type: 'messageReceived'; from: Device; text: string; senderVerified: boolean }
+  | { type: 'messageSent'; peer: string; text: string }
   | {
       type: 'transferStarted';
       transferId: string;
@@ -77,3 +80,10 @@ export type CoreEvent =
   | { type: 'progress'; transferId: string; direction: Direction; bytes: number; total: number }
   | { type: 'transferDone'; transferId: string; direction: Direction; paths: string[] }
   | { type: 'transferFailed'; transferId: string; direction: Direction; reason: FailReason };
+
+/** What a Ctrl/Cmd+V sent (returned by the paste command). */
+export type Pasted =
+  | { kind: 'files'; count: number; name: string }
+  | { kind: 'image'; name: string }
+  | { kind: 'text'; preview: string }
+  | { kind: 'empty' };

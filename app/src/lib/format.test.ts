@@ -26,3 +26,12 @@ test('shortFp and lastTwo', () => {
   expect(lastTwo('C:\\Users\\me\\Downloads\\sendit')).toBe('Downloads/sendit');
   expect(lastTwo('/home/me/Downloads/sendit/')).toBe('Downloads/sendit');
 });
+
+import { primaryIp } from './format';
+
+test('primaryIp prefers home-network addresses over virtual and link-local ones', () => {
+  expect(primaryIp(['172.28.0.1', '169.254.52.253', '192.168.1.101'])).toBe('192.168.1.101');
+  expect(primaryIp(['172.20.1.1', '10.0.0.5'])).toBe('10.0.0.5');
+  expect(primaryIp(['172.20.1.1'])).toBe('172.20.1.1');
+  expect(primaryIp([])).toBeNull();
+});

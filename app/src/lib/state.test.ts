@@ -141,3 +141,8 @@ describe('messages', () => {
     });
   });
 });
+
+test('a sent message becomes an outgoing message ticket', () => {
+  const s = apply(initial(), { type: 'messageSent', peer: PIXEL.fingerprint, text: 'yo' }, 9);
+  expect(ticketsFor(s, PIXEL.fingerprint)[0]).toMatchObject({ status: 'message', direction: 'outgoing', text: 'yo', at: 9 });
+});
