@@ -87,7 +87,8 @@ async fn prepare_upload(
     Query(q): Query<PinQuery>,
     Json(req): Json<PrepareUploadRequest>,
 ) -> Response {
-    if let Some(pin) = &n.cfg.pin {
+    let settings = n.settings();
+    if let Some(pin) = &settings.pin {
         let ip = remote.ip();
         let failures = n
             .pin_failures
@@ -169,7 +170,7 @@ async fn prepare_upload(
                 from: from.clone(),
                 files: files.clone(),
                 total_size: total,
-                fits_on_disk: has_space(&n.cfg.download_dir, total),
+                fits_on_disk: has_space(&settings.download_dir, total),
                 sender_verified,
             },
         });
@@ -183,7 +184,7 @@ async fn prepare_upload(
     let Decision::Accept { dest } = decision else {
         return StatusCode::FORBIDDEN.into_response();
     };
-    let dest = dest.unwrap_or_else(|| n.cfg.download_dir.clone());
+    let dest = dest.unwrap_or_else(|| n.settings().download_dir);
     match n.open_session(from, files, total, dest, request_id) {
         Some(resp) => Json(resp).into_response(),
         None => StatusCode::CONFLICT.into_response(),

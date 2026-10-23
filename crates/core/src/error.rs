@@ -24,6 +24,9 @@ pub enum Error {
     NoSuchRequest(String),
     #[error("not enough disk space")]
     DiskFull,
+    /// A setting the user tried to save; the message is shown as-is.
+    #[error("{0}")]
+    Invalid(String),
     #[error("transfer failed: {0:?}")]
     Transfer(FailReason),
 }

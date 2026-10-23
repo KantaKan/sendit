@@ -1,5 +1,6 @@
 import type { Bridge, DragState } from './bridge';
-import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted } from './types';
+import type { Ticket } from './state';
+import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted, Settings } from './types';
 
 export interface Seed {
   info?: Partial<AppInfo>;
@@ -13,6 +14,19 @@ export interface Seed {
   addPeer?: Device;
   /** paste() resolves with this */
   pasted?: Pasted;
+  settings?: Partial<Settings>;
+  /** updateSettings() rejects with this */
+  settingsError?: string;
+  /** setAutostart() rejects with this */
+  autostartError?: string;
+  /** what loadHistory() returns when nothing has been saved */
+  history?: Ticket[];
+  /** loadHistory() resolves after this many ms */
+  historyDelayMs?: number;
+  /** saveHistory() rejects with this */
+  saveHistoryError?: string;
+  /** keep saved history in localStorage, so it survives a reload (e2e) */
+  persist?: boolean;
 }
 
 export interface Call {
@@ -36,6 +50,21 @@ export function createMockBridge(seed: Seed = {}) {
     downloadDir: 'C:\\Users\\me\\Downloads\\sendit',
     addresses: ['192.168.1.101'],
     ...seed.info,
+  };
+  let settings: Settings = {
+    alias: info.alias, downloadDir: info.downloadDir, pin: null, closeToTray: true, ...seed.settings,
+  };
+  let autostart = false;
+  const KEY = 'sendit-mock-history';
+  let savedHistory: Ticket[] | null = null;
+  const readSaved = (): Ticket[] | null => {
+    if (!seed.persist) return savedHistory;
+    try {
+      const raw = localStorage.getItem(KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   };
   const bridge: Bridge = {
     info: async () => info,
@@ -74,6 +103,36 @@ export function createMockBridge(seed: Seed = {}) {
     paste: async (fp) => {
       rec('paste', fp);
       return seed.pasted ?? { kind: 'empty' };
+    },
+settings: async () => settings,
+    updateSettings: async (s) => {
+      rec('updateSettings', s);
+      if (seed.settingsError) throw seed.settingsError;
+      settings = { ...s, alias: s.alias.trim() };
+      return settings;
+    },
+    setAutoAccept: async (fp, on) => rec('setAutoAccept', fp, on),
+    autostart: async () => autostart,
+    setAutostart: async (on) => {
+      rec('setAutostart', on);
+      if (seed.autostartError) throw seed.autostartError;
+      autostart = on;
+    },
+    loadHistory: async () => {
+      if (seed.historyDelayMs) await new Promise((r) => setTimeout(r, seed.historyDelayMs));
+      return readSaved() ?? seed.history ?? [];
+    },
+    saveHistory: async (items) => {
+      rec('saveHistory', items);
+      if (seed.saveHistoryError) throw seed.saveHistoryError;
+      savedHistory = items;
+      if (seed.persist) {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(items));
+        } catch {
+          /* private mode: in-memory only */
+        }
+      }
     },
     onAppError: (cb) => {
       errorSubs.add(cb);

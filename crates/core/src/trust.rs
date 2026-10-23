@@ -30,6 +30,7 @@ pub struct KnownDevice {
     pub fingerprint: String,
     pub alias: String,
     pub trust: TrustLevel,
+    pub auto_accept: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -136,6 +137,7 @@ impl TrustStore {
                 fingerprint: fp.clone(),
                 alias: r.alias.clone(),
                 trust: self.level(fp),
+                auto_accept: r.auto_accept,
             })
             .collect();
         v.sort_by_key(|d| d.alias.to_lowercase());
@@ -191,7 +193,7 @@ impl TrustStore {
         let Some(path) = &self.path else { return };
         match serde_json::to_vec_pretty(&self.records) {
             Ok(bytes) => {
-                if let Err(e) = std::fs::write(path, bytes) {
+                if let Err(e) = crate::write_atomic(path, &bytes) {
                     tracing::warn!("saving trust store: {e}");
                 }
             }
@@ -283,11 +285,14 @@ mod tests {
         t.observe("BB", "zed");
         t.observe("AA", "Amy");
         t.set_verified("AA", true);
+        t.set_auto_accept("AA", true);
         let k = t.known();
         assert_eq!(
             k.iter().map(|d| d.alias.as_str()).collect::<Vec<_>>(),
             ["Amy", "zed"]
         );
         assert_eq!(k[0].trust, TrustLevel::Verified);
+        assert!(k[0].auto_accept);
+        assert!(!k[1].auto_accept);
     }
 }

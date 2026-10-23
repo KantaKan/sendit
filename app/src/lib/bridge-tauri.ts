@@ -1,11 +1,13 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
 import { open } from '@tauri-apps/plugin-dialog';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import type { Bridge, DragState } from './bridge';
-import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted } from './types';
+import type { Ticket } from './state';
+import type { AppInfo, CoreEvent, Device, KnownDevice, Pasted, Settings } from './types';
 
 /** Tauri's listeners are async to attach; give the UI a sync unsubscribe. */
 function subscribe<T>(attach: (cb: T) => Promise<() => void>, cb: T): () => void {
@@ -49,6 +51,13 @@ export const tauriBridge: Bridge = {
       if (ok) sendNotification({ title, body });
     })();
   },
+settings: () => invoke<Settings>('get_settings'),
+  updateSettings: (settings) => invoke<Settings>('update_settings', { settings }),
+  setAutoAccept: (fingerprint, on) => invoke('set_auto_accept', { fingerprint, on }),
+  autostart: () => isEnabled(),
+  setAutostart: (on) => (on ? enable() : disable()),
+  loadHistory: () => invoke<Ticket[]>('load_history'),
+  saveHistory: (items) => invoke('save_history', { items }),
   paste: (fingerprint) => invoke<Pasted>('paste', { fingerprint }),
   onAppError: (cb) => subscribe((f: typeof cb) => listen<string>('app-error', (e) => f(e.payload)), cb),
   onEvent: (cb) => subscribe((f: typeof cb) => listen<CoreEvent>('core-event', (e) => f(e.payload)), cb),

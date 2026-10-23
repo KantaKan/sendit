@@ -1,15 +1,26 @@
 //! The desktop shell: one sendit `Node`, exposed to the webview as commands,
 //! with every core event forwarded as `core-event`.
+mod persist;
+
 use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext, ContentFormat};
+use persist::{AppSettings, HISTORY, SETTINGS};
 use sendit_core::{
     protocol::DEFAULT_PORT, trust::KnownDevice, Config, Decision, Device, Error, Node,
 };
 use serde::Serialize;
+use serde_json::Value;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::{
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
 };
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    RunEvent, WindowEvent,
+};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_notification::NotificationExt;
 use tokio::sync::broadcast::error::RecvError;
 
 #[derive(Serialize, Debug)]
@@ -30,7 +41,7 @@ pub fn app_info(node: &Node) -> AppInfo {
         fingerprint: node.fingerprint().to_string(),
         port: node.port(),
         port_fallback: node.port_fallback(),
-        download_dir: node.download_dir().to_path_buf(),
+        download_dir: node.download_dir(),
         addresses: node.local_ips().iter().map(|ip| ip.to_string()).collect(),
     }
 }
@@ -148,20 +159,138 @@ fn set_verified(node: State<'_, Node>, fingerprint: String, verified: bool) {
     node.set_verified(&fingerprint, verified);
 }
 
+/// App-level state next to the Node.
+pub struct Shell {
+    close_to_tray: AtomicBool,
+    /// "still running in the tray" was shown this run.
+    hinted: AtomicBool,
+    data_dir: PathBuf,
+}
+
+fn current_settings(node: &Node, shell: &Shell) -> AppSettings {
+    AppSettings::from_core(node.settings(), shell.close_to_tray.load(Relaxed))
+}
+
+#[tauri::command]
+fn get_settings(node: State<'_, Node>, shell: State<'_, Shell>) -> AppSettings {
+    current_settings(&node, &shell)
+}
+
+/// Bad values come back as the error; a failed file write only shows the banner.
+#[tauri::command]
+fn update_settings(
+    app: AppHandle,
+    node: State<'_, Node>,
+    shell: State<'_, Shell>,
+    settings: AppSettings,
+) -> Result<AppSettings, String> {
+    node.update_settings(settings.core())
+        .map_err(|e| e.to_string())?;
+    shell.close_to_tray.store(settings.close_to_tray, Relaxed);
+    let saved = current_settings(&node, &shell);
+    if let Err(e) = persist::save_settings(&shell.data_dir.join(SETTINGS), &saved) {
+        let _ = app.emit("app-error", format!("Could not save settings: {e}"));
+    }
+    Ok(saved)
+}
+
+#[tauri::command]
+fn set_auto_accept(node: State<'_, Node>, fingerprint: String, on: bool) {
+    node.set_auto_accept(&fingerprint, on);
+}
+
+#[tauri::command]
+fn load_history(shell: State<'_, Shell>) -> Vec<Value> {
+    persist::load_history(&shell.data_dir.join(HISTORY))
+}
+
+#[tauri::command]
+fn save_history(shell: State<'_, Shell>, items: Vec<Value>) -> Result<(), String> {
+    persist::save_history(&shell.data_dir.join(HISTORY), items).map_err(|e| e.to_string())
+}
+
+fn show_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+fn toggle_window(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("main") else {
+        return;
+    };
+    if w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false) {
+        let _ = w.hide();
+    } else {
+        show_window(app);
+    }
+}
+
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "open", "Open sendit", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .expect("bundle has an icon");
+    TrayIconBuilder::with_id("main")
+        .icon(icon)
+        .tooltip("sendit")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, e| match e.id().as_ref() {
+            "open" => show_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, e| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = e
+            {
+                toggle_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
+        // First: a second launch only brings up the running window (port 53317 is ours).
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_window(app)
+        }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data = app.path().app_data_dir()?;
-            let down = app
+            let default_down = app
                 .path()
                 .download_dir()
                 .map(|d| d.join("sendit"))
                 .unwrap_or_else(|_| data.join("downloads"));
-            let alias = gethostname::gethostname().to_string_lossy().into_owned();
-            let node = tauri::async_runtime::block_on(Node::start(Config::new(alias, data, down)))?;
+            let defaults = AppSettings {
+                alias: gethostname::gethostname().to_string_lossy().into_owned(),
+                download_dir: default_down.clone(),
+                pin: None,
+                close_to_tray: true,
+            };
+            let saved = persist::load_settings(&data.join(SETTINGS), defaults);
+            let down = persist::usable_dir(&saved.download_dir, default_down);
+            let mut cfg = Config::new(saved.alias.clone(), data.clone(), down);
+            cfg.pin = saved.pin.clone();
+            let node = tauri::async_runtime::block_on(Node::start(cfg))?;
             let handle = app.handle().clone();
             let mut rx = node.subscribe();
             tauri::async_runtime::spawn(async move {
@@ -176,7 +305,36 @@ pub fn run() {
                 }
             });
             app.manage(node);
+            app.manage(Shell {
+                close_to_tray: AtomicBool::new(saved.close_to_tray),
+                hinted: AtomicBool::new(false),
+                data_dir: data,
+            });
+            build_tray(app)?;
+            if !std::env::args().any(|a| a == "--hidden") {
+                show_window(app.handle());
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            let WindowEvent::CloseRequested { api, .. } = event else {
+                return;
+            };
+            let shell = window.state::<Shell>();
+            if !shell.close_to_tray.load(Relaxed) {
+                return; // the last window closes and the app exits
+            }
+            api.prevent_close();
+            let _ = window.hide();
+            if !shell.hinted.swap(true, Relaxed) {
+                let _ = window
+                    .app_handle()
+                    .notification()
+                    .builder()
+                    .title("sendit")
+                    .body("sendit is still running in the tray")
+                    .show();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             info,
@@ -192,10 +350,22 @@ pub fn run() {
             block,
             set_verified,
             paste,
-            send_text
+            send_text,
+            get_settings,
+            update_settings,
+            set_auto_accept,
+            load_history,
+            save_history
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running sendit");
+        .build(tauri::generate_context!())
+        .expect("error while building sendit")
+        .run(|app, e| {
+            if let RunEvent::Exit = e {
+                if let Some(node) = app.try_state::<Node>() {
+                    node.shutdown();
+                }
+            }
+        });
 }
 
 /// What the clipboard held, checked in this order.

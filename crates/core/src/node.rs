@@ -12,7 +12,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -59,10 +59,40 @@ impl Config {
     }
 }
 
+pub const MAX_ALIAS: usize = 64;
+
+/// What the user can change while the node runs. `Config` supplies the start values.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Settings {
+    pub alias: String,
+    pub download_dir: PathBuf,
+    /// None = no PIN.
+    pub pin: Option<String>,
+}
+
+impl Settings {
+    fn normalized(mut self) -> Result<Self> {
+        let alias: String = self.alias.trim().chars().take(MAX_ALIAS).collect();
+        if alias.trim().is_empty() {
+            return Err(Error::Invalid("Device name can't be empty".into()));
+        }
+        self.alias = alias.trim_end().to_string();
+        self.pin = self
+            .pin
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty());
+        std::fs::create_dir_all(&self.download_dir).map_err(|e| {
+            Error::Invalid(format!("Can't use {}: {e}", self.download_dir.display()))
+        })?;
+        Ok(self)
+    }
+}
+
 pub(crate) struct Inner {
     pub cfg: Config,
     pub identity: Identity,
     pub port: u16,
+    pub settings: Mutex<Settings>,
     pub trust: Mutex<TrustStore>,
     /// Keyed by uppercase fingerprint.
     pub devices: Mutex<HashMap<String, Device>>,
@@ -78,7 +108,7 @@ pub(crate) struct Inner {
 
 #[derive(Clone, Debug)]
 pub enum Decision {
-    /// `dest = None` uses `Config::download_dir`.
+    /// `dest = None` uses the current download folder setting.
     Accept {
         dest: Option<PathBuf>,
     },
@@ -90,9 +120,13 @@ impl Inner {
         let _ = self.events.send(e);
     }
 
+    pub(crate) fn settings(&self) -> Settings {
+        self.settings.lock().unwrap().clone()
+    }
+
     pub(crate) fn my_info(&self) -> DeviceInfo {
         DeviceInfo {
-            alias: self.cfg.alias.clone(),
+            alias: self.settings().alias,
             version: PROTOCOL_VERSION.into(),
             device_model: Some(std::env::consts::OS.into()),
             device_type: Some("desktop".into()),
@@ -187,10 +221,16 @@ impl Node {
         listener.set_nonblocking(true)?;
         let port = listener.local_addr()?.port();
         let (events, _) = broadcast::channel(1024);
+        let settings = Settings {
+            alias: cfg.alias.clone(),
+            download_dir: cfg.download_dir.clone(),
+            pin: cfg.pin.clone(),
+        };
         let inner = Arc::new(Inner {
             cfg,
             identity,
             port,
+            settings: Mutex::new(settings),
             trust: Mutex::new(trust),
             devices: Mutex::new(HashMap::new()),
             events,
@@ -307,7 +347,7 @@ impl Node {
         if let Decision::Accept { dest } = &decision {
             let dir = dest
                 .clone()
-                .unwrap_or_else(|| self.inner.cfg.download_dir.clone());
+                .unwrap_or_else(|| self.inner.settings().download_dir);
             if !has_space(&dir, p.total) {
                 pending.insert(request_id.to_string(), p);
                 return Err(Error::DiskFull);
@@ -363,8 +403,30 @@ impl Node {
         self.inner.trust.lock().unwrap().known()
     }
 
-    pub fn download_dir(&self) -> &Path {
-        &self.inner.cfg.download_dir
+    pub fn download_dir(&self) -> PathBuf {
+        self.inner.settings().download_dir
+    }
+
+    pub fn settings(&self) -> Settings {
+        self.inner.settings()
+    }
+
+    /// Validates and applies `s` at once. A new name is announced on the LAN.
+    pub fn update_settings(&self, s: Settings) -> Result<Settings> {
+        let s = s.normalized()?;
+        let renamed = {
+            let mut cur = self.inner.settings.lock().unwrap();
+            if cur.pin != s.pin {
+                self.inner.pin_failures.lock().unwrap().clear();
+            }
+            let renamed = cur.alias != s.alias;
+            *cur = s.clone();
+            renamed
+        };
+        if renamed && self.inner.cfg.multicast {
+            discovery::send_announcement(&self.inner, true);
+        }
+        Ok(s)
     }
 
     pub fn shutdown(&self) {
