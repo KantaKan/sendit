@@ -17,6 +17,8 @@
 - **A timeline, not a progress dialog.** Incoming requests, live transfers (with a speed graph and time left) and finished items with photo thumbnails. Right-click any item to show it in its folder, copy it, retry it, or remove it.
 - **End-to-end encrypted, and harder to fool than plain LocalSend.** Device to device over TLS, with key pinning and trust-on-first-use. See [Security](#security).
 - **Safe receiving.** You accept each request (or auto-accept trusted devices). Files never land outside your download folder, never overwrite anything, and are only ever *revealed* in your file manager, never opened.
+- **Stays out of the way.** Closing the window keeps sendit running in the tray, so phones can still send to it. Optionally start it when you sign in.
+- **Settings** for your device name, download folder, a PIN, and which verified devices are auto-accepted. History keeps your last 500 transfers across restarts (clearing it never deletes files).
 - **A CLI too:** `sendit devices`, `sendit send <files> --to <name>`, `sendit receive`.
 
 ## Install
