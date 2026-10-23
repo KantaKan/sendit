@@ -1,5 +1,7 @@
 //! The desktop shell: one sendit `Node`, exposed to the webview as commands,
 //! with every core event forwarded as `core-event`.
+mod persist;
+
 use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext, ContentFormat};
 use sendit_core::{
     protocol::DEFAULT_PORT, trust::KnownDevice, Config, Decision, Device, Error, Node,

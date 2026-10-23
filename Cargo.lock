@@ -3855,6 +3855,7 @@ dependencies = [
  "gethostname 0.5.0",
  "sendit-core",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
