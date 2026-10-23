@@ -4,7 +4,7 @@ import EmptyState from './EmptyState.svelte';
 import type { AppInfo } from './types';
 
 const ME: AppInfo = {
-  alias: 'fia-pc', fingerprint: 'C0FFEE'.padEnd(64, '0'), port: 53317, portFallback: false,
+  alias: 'studio-pc', fingerprint: 'C0FFEE'.padEnd(64, '0'), port: 53317, portFallback: false,
   downloadDir: 'C:/d', addresses: ['172.28.0.1', '192.168.1.101'],
 };
 const props = (over = {}) => ({
@@ -21,7 +21,7 @@ test('shows how others see us and how to get found', async () => {
   const p = props();
   render(EmptyState, { props: p });
   expect(screen.getByRole('heading', { name: /Looking on this Wi-Fi/ })).toBeInTheDocument();
-  expect(screen.getByText('fia-pc')).toBeInTheDocument();
+  expect(screen.getByText('studio-pc')).toBeInTheDocument();
   expect(screen.getByText('192.168.1.101')).toBeInTheDocument();
   expect(screen.getByText('VISIBLE')).toBeInTheDocument();
   expect(screen.getByText(/keep LocalSend on screen/)).toBeInTheDocument();

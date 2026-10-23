@@ -30,7 +30,7 @@ test('demo', async ({ page }) => {
   await page.addInitScript(cursor);
   await page.addInitScript(() => {
     (window as any).__senditSeed = {
-      info: { alias: 'fia-pc', fingerprint: 'C0FFEE51D3'.padEnd(64, '0'), addresses: ['192.168.1.101'] },
+      info: { alias: 'studio-pc', fingerprint: 'C0FFEE51D3'.padEnd(64, '0'), addresses: ['192.168.1.101'] },
       pasted: { kind: 'text', preview: 'demo' },
     };
   });
