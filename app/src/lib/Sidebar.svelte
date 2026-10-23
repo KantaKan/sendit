@@ -60,9 +60,16 @@
     <p class="group mono">seen before</p>
     <ul>
       {#each seenBefore as k (k.fingerprint)}
-        <li class="dev off">
-          <Avatar fingerprint={k.fingerprint} />
-          <span class="text"><b>{k.alias}</b><small class="mono">not nearby</small></span>
+        <li>
+          <button
+            class="dev off"
+            class:on={k.fingerprint === selected}
+            aria-current={k.fingerprint === selected ? 'true' : undefined}
+            onclick={() => onselect(k.fingerprint)}
+          >
+            <Avatar fingerprint={k.fingerprint} />
+            <span class="text"><b>{k.alias}</b><small class="mono">not nearby</small></span>
+          </button>
         </li>
       {/each}
     </ul>

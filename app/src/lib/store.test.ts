@@ -193,3 +193,16 @@ test('two quick settings changes both stick', async () => {
   expect(store.settings).toMatchObject({ alias: 'Studio', closeToTray: false });
   expect(m.calls.filter((c) => c.name === 'updateSettings').at(-1)!.args[0]).toMatchObject({ alias: 'Studio', closeToTray: false });
 });
+
+test('a device that is not nearby opens with its history, and sending to it explains why not', async () => {
+  const LAB = { fingerprint: 'B'.repeat(64), alias: 'Lab PC', trust: 'known' as const, autoAccept: false };
+  const { m, store } = await setup({ known: [LAB], history: [{ ...DONE, peer: LAB.fingerprint }] });
+  store.select(LAB.fingerprint);
+  expect(store.selectedDevice?.alias).toBe('Lab PC');
+  expect(ticketsFor(store.state, LAB.fingerprint)).toHaveLength(1);
+  m.drag({ kind: 'drop', paths: ['C:/a.txt'] });
+  await store.paste();
+  await tick();
+  expect(store.error).toBe('Lab PC is not nearby right now.');
+  expect(m.calls.filter((c) => c.name === 'sendFiles' || c.name === 'paste')).toEqual([]);
+});

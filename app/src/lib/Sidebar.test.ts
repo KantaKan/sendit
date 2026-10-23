@@ -45,3 +45,15 @@ test('the Settings button opens settings and Refresh stays reachable', async () 
   await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
   expect(onrefresh).toHaveBeenCalled();
 });
+
+test('a device that is not nearby can still be opened for its history', async () => {
+  const onselect = vi.fn();
+  render(Sidebar, {
+    props: {
+      me: null, nearby: [], seenBefore: [{ fingerprint: 'B'.repeat(64), alias: 'Lab PC', trust: 'known', autoAccept: false }],
+      selected: null, searching: false, waiting: {}, onselect, onrefresh: vi.fn(), onsettings: vi.fn(), settingsOpen: false,
+    },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: /Lab PC/ }));
+  expect(onselect).toHaveBeenCalledWith('B'.repeat(64));
+});

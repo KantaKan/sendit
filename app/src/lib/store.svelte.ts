@@ -77,12 +77,21 @@ export function createStore(bridge: Bridge) {
     if (e.type === 'deviceUpdated' || e.type === 'identityChanged') refreshKnown();
   }
 
+  /** A device from "seen before" opens for its history, but can't be sent to. */
+  const away = (fp: string) => (state.devices[fp] ? null : (state.known.find((k) => k.fingerprint === fp) ?? null));
+  function reachable(fp: string): boolean {
+    const k = away(fp);
+    if (k) error = `${k.alias} is not nearby right now.`;
+    return !k;
+  }
+
   function send(paths: string[]) {
     if (!paths.length) return;
     if (!selected) {
       error = 'Pick a device first, then drop the files on it.';
       return;
     }
+    if (!reachable(selected)) return;
     bridge.sendFiles(selected, paths).catch(fail);
   }
 
@@ -108,7 +117,12 @@ export function createStore(bridge: Bridge) {
     get error() { return error; },
     /** short-lived hint shown in the conversation footer */
     get notice() { return notice; },
-    get selectedDevice(): Device | null { return selected ? (state.devices[selected] ?? null) : null; },
+    get selectedDevice(): Device | null {
+      if (!selected) return null;
+      const k = away(selected);
+      if (!k) return state.devices[selected] ?? null;
+      return { fingerprint: k.fingerprint, alias: k.alias, deviceModel: 'not nearby', deviceType: null, addr: '', trust: k.trust, isSendit: false };
+    },
 
     start(): () => void {
       const offEvent = bridge.onEvent(onEvent);
@@ -188,6 +202,7 @@ export function createStore(bridge: Bridge) {
       }
       try {
         // What was pasted shows up as a ticket or bubble; only "nothing" needs words.
+        if (!reachable(selected)) return;
         const pasted = await bridge.paste(selected);
         if (pasted.kind === 'empty') showNotice('Nothing to paste. Copy a file, image or text first.');
       } catch (e) {
@@ -207,6 +222,7 @@ export function createStore(bridge: Bridge) {
     },
     cancel(transferId: string) { bridge.cancel(transferId).catch(fail); },
     retry(t: Ticket) {
+      if (!reachable(t.peer)) return;
       if (t.text !== undefined) bridge.sendText(t.peer, t.text).catch(fail);
       else if (t.sources.length) bridge.sendFiles(t.peer, t.sources).catch(fail);
     },
