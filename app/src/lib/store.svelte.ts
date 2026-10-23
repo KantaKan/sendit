@@ -3,7 +3,7 @@ import { clearFinished, restore, toSaved } from './history';
 import {
   apply, initial, markAccepting, removeTicket, markDeclined, markExpired, markPending, type State, type Ticket,
 } from './state';
-import type { AppInfo, CoreEvent, Device } from './types';
+import type { AppInfo, CoreEvent, Device, Settings } from './types';
 
 export function createStore(bridge: Bridge) {
   let state = $state<State>(initial());
@@ -13,6 +13,8 @@ export function createStore(bridge: Bridge) {
   let dragging = $state(false);
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
+  let settings = $state<Settings | null>(null);
+  let page = $state<'chat' | 'settings'>('chat');
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
   const showNotice = (text: string) => {
     notice = text;
@@ -117,6 +119,7 @@ export function createStore(bridge: Bridge) {
       void (async () => {
         try {
           me = await bridge.info();
+          settings = await bridge.settings();
           const [devices, known] = await Promise.all([bridge.devices(), bridge.knownDevices()]);
           for (const d of devices) addDevice(d);
           state = { ...state, known };
@@ -140,7 +143,36 @@ export function createStore(bridge: Bridge) {
         offError();
       };
     },
-    select(fp: string) { selected = fp; },
+    get settings() { return settings; },
+    get page() { return page; },
+    openSettings() { page = 'settings'; },
+    closeSettings() { page = 'chat'; },
+    select(fp: string) { selected = fp; page = 'chat'; },
+    /** Saves one change. Resolves to the message to show under that field, or null. */
+    async updateSettings(change: Partial<Settings>): Promise<string | null> {
+      if (!settings) return null;
+      try {
+        settings = await bridge.updateSettings({ ...settings, ...change });
+        if (me) me = { ...me, alias: settings.alias, downloadDir: settings.downloadDir };
+        return null;
+      } catch (e) {
+        return String(e);
+      }
+    },
+    setAutoAccept(fp: string, on: boolean) {
+      bridge.setAutoAccept(fp, on).then(refreshKnown).catch(fail);
+    },
+    autostart: () => bridge.autostart().catch(() => false),
+    /** Resolves to the state the OS really has (so a refused change snaps back). */
+    async setAutostart(on: boolean): Promise<boolean> {
+      try {
+        await bridge.setAutostart(on);
+      } catch (e) {
+        fail(e);
+      }
+      return bridge.autostart().catch(() => false);
+    },
+    pickFolder: () => bridge.pickFolder(),
     send,
     async paste() {
       if (!selected) {

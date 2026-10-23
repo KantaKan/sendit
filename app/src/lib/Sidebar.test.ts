@@ -17,6 +17,8 @@ test('lists nearby and seen-before devices and selects on click', async () => {
       waiting: { ['D'.repeat(64)]: 2 },
       onselect,
       onrefresh: vi.fn(),
+      settingsOpen: false,
+      onsettings: vi.fn(),
     },
   });
   expect(screen.getByRole('button', { name: /Pixel 8/ })).toHaveAttribute('aria-current', 'true');
@@ -25,4 +27,21 @@ test('lists nearby and seen-before devices and selects on click', async () => {
   expect(screen.getByLabelText('2 waiting')).toHaveTextContent('2');
   await fireEvent.click(screen.getByRole('button', { name: /iPhone/ }));
   expect(onselect).toHaveBeenCalledWith('D'.repeat(64));
+});
+
+test('the Settings button opens settings and Refresh stays reachable', async () => {
+  const onsettings = vi.fn();
+  const onrefresh = vi.fn();
+  render(Sidebar, {
+    props: {
+      me: null, nearby: [device()], seenBefore: [], selected: null, searching: false, waiting: {},
+      onselect: vi.fn(), onrefresh, onsettings, settingsOpen: true,
+    },
+  });
+  const btn = screen.getByRole('button', { name: 'Settings' });
+  expect(btn).toHaveAttribute('aria-pressed', 'true');
+  await fireEvent.click(btn);
+  expect(onsettings).toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+  expect(onrefresh).toHaveBeenCalled();
 });

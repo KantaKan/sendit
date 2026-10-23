@@ -4,7 +4,7 @@
   import type { AppInfo, Device, KnownDevice } from './types';
 
   let {
-    me, nearby, seenBefore, selected, searching, waiting, onselect, onrefresh,
+    me, nearby, seenBefore, selected, searching, waiting, onselect, onrefresh, settingsOpen, onsettings,
   }: {
     me: AppInfo | null;
     nearby: Device[];
@@ -15,6 +15,8 @@
     waiting: Record<string, number>;
     onselect: (fp: string) => void;
     onrefresh: () => void;
+    settingsOpen: boolean;
+    onsettings: () => void;
   } = $props();
 
   function sub(d: Device): string {
@@ -28,7 +30,10 @@
 <nav aria-label="Devices">
   <div class="brand">sendit</div>
   {#if nearby.length}
-    <p class="group mono">nearby</p>
+    <div class="grouprow">
+      <p class="group mono">nearby</p>
+      <button class="link mono" onclick={onrefresh} disabled={searching}>{searching ? 'Looking…' : 'Refresh'}</button>
+    </div>
     <ul>
       {#each nearby as d (d.fingerprint)}
         <li>
@@ -67,7 +72,7 @@
       <Avatar fingerprint={me.fingerprint} size={28} />
       <span class="text"><b>{me.alias}</b><small class="mono">{shortFp(me.fingerprint)}</small></span>
     {/if}
-    <button class="refresh mono" onclick={onrefresh} disabled={searching}>{searching ? 'Looking…' : 'Refresh'}</button>
+    <button class="gear" class:on={settingsOpen} aria-pressed={settingsOpen} onclick={onsettings}>Settings</button>
   </div>
 </nav>
 
@@ -87,5 +92,9 @@
   .danger { color: var(--danger-text) !important; }
   .me { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 12px 8px 0; border-top: 1px solid var(--line); }
   .me .text { flex: 1; }
-  .refresh { font-size: 11px; background: var(--surface); border: 0; border-radius: 8px; padding: 6px 10px; color: var(--muted); }
+  .grouprow { display: flex; align-items: center; justify-content: space-between; margin-right: 8px; }
+  .link { background: none; border: 0; padding: 0; font-size: 11px; color: var(--faint); }
+  .link:hover:not(:disabled) { color: var(--text); }
+  .gear { font-size: 12px; background: var(--surface); border: 0; border-radius: 8px; padding: 6px 10px; color: var(--text); }
+  .gear.on { background: var(--accent); color: var(--accent-ink); }
 </style>

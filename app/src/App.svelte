@@ -5,6 +5,7 @@
   import DropOverlay from './lib/DropOverlay.svelte';
   import EmptyState from './lib/EmptyState.svelte';
   import PortBanner from './lib/PortBanner.svelte';
+  import Settings from './lib/Settings.svelte';
   import Sidebar from './lib/Sidebar.svelte';
   import { nearby, seenBefore, ticketsFor } from './lib/state';
   import { createStore } from './lib/store.svelte';
@@ -17,6 +18,10 @@
     const stop = store.start();
     // Ctrl/Cmd+V anywhere except text fields sends the clipboard.
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && store.page === 'settings') {
+        store.closeSettings();
+        return;
+      }
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'v') return;
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
@@ -55,6 +60,8 @@
     {waiting}
     onselect={store.select}
     onrefresh={store.refresh}
+    settingsOpen={store.page === 'settings'}
+    onsettings={() => (store.page === 'settings' ? store.closeSettings() : store.openSettings())}
   />
   <main>
     {#if store.me?.portFallback}<PortBanner port={store.me.port} />{/if}
@@ -64,7 +71,9 @@
         <button onclick={store.dismissError}>Dismiss</button>
       </div>
     {/if}
-    {#if store.selectedDevice}
+    {#if store.page === 'settings'}
+      <Settings {store} />
+    {:else if store.selectedDevice}
       <Conversation
         device={store.selectedDevice}
         tickets={ticketsFor(store.state, store.selectedDevice.fingerprint)}
