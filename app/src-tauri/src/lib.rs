@@ -30,7 +30,7 @@ pub fn app_info(node: &Node) -> AppInfo {
         fingerprint: node.fingerprint().to_string(),
         port: node.port(),
         port_fallback: node.port_fallback(),
-        download_dir: node.download_dir().to_path_buf(),
+        download_dir: node.download_dir(),
         addresses: node.local_ips().iter().map(|ip| ip.to_string()).collect(),
     }
 }
