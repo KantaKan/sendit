@@ -11,6 +11,8 @@ async function boot(page: Page, seed: object) {
     (window as unknown as { __senditSeed: object }).__senditSeed = s;
   }, seed);
   await page.goto('/');
+  // main.ts installs the mock bridge from a dynamic import, after 'load'.
+  await page.waitForFunction(() => (window as any).__sendit);
 }
 const emit = (page: Page, e: object) => page.evaluate((ev) => (window as any).__sendit.emit(ev), e);
 const drag = (page: Page, d: object) => page.evaluate((x) => (window as any).__sendit.drag(x), d);
